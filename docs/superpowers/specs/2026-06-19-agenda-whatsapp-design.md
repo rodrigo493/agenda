@@ -14,7 +14,9 @@ afazeres em linguagem natural com fricção zero, e receber lembretes no WhatsAp
 
 **Dentro:**
 - Captura por linguagem natural via WhatsApp (Claude interpreta).
-- 5 intenções entendidas: `ideia`, `tarefa`, `listar`, `feito`, `cancelar`.
+- 6 intenções entendidas: `ideia`, `tarefa`, `listar`, `feito`, `cancelar`, `reagendar`.
+- Reagendar/snooze de tarefa pelo WhatsApp ("adia a ligação do Victor pra
+  amanhã 10h", "snooze 1h").
 - Sincronização somente-leitura do Google Agenda (1 conta).
 - Lembrete 10 min antes de: reuniões com horário marcado + tarefas com hora.
 - Confirmação de cada ação de volta no WhatsApp.
@@ -22,7 +24,8 @@ afazeres em linguagem natural com fricção zero, e receber lembretes no WhatsAp
 **Fora (v2+):**
 - Recorrência de tarefas.
 - Múltiplas agendas Google / multiusuário.
-- Snooze / reagendar pelo WhatsApp.
+- Reagendar eventos do Google pelo WhatsApp (v1 é somente-leitura do Google;
+  snooze vale só para tarefas próprias).
 - Web app de visualização (pode vir depois, dados já ficam prontos).
 
 ## Decisões tomadas
@@ -65,6 +68,10 @@ Três Edge Functions + dois jobs pg_cron + um endpoint OAuth.
      - `listar` → busca itens (hoje / abertos) e responde a lista.
      - `feito` → marca item como `status=feito` (casa por referência textual/índice).
      - `cancelar` → marca item como `status=cancelado`.
+     - `reagendar` → atualiza `due_at` da tarefa (data absoluta "amanhã 10h" ou
+       relativa "snooze 1h", calculada sobre o `due_at` atual) e **reseta
+       `lembrete_enviado=false`** para o novo lembrete disparar. Só tarefas
+       próprias; evento do Google não é alterado.
    - Responde confirmação no WhatsApp via Uazapi.
    - Se Claude não tiver confiança, pede para reformular (não inventa).
 
@@ -145,6 +152,8 @@ config (
   relativas ("amanhã 15h", "sexta de manhã") no fuso certo.
 - **Lembrete:** janela de 10 min (inclui/exclui bordas), não-duplicação,
   conversão de fuso, dia-todo ignorado.
+- **Reagendar:** "snooze 1h" soma sobre `due_at` atual; data absoluta substitui;
+  `lembrete_enviado` volta a `false`.
 - **Inbound (integração):** payload real Uazapi → grava item certo → responde.
 - **gcal-sync:** upsert por `gcal_id`, reset de `lembrete_enviado` em mudança de hora.
 
