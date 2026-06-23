@@ -80,10 +80,22 @@ export async function tarefasNaJanela(db: SupabaseClient, ateISO: string): Promi
 }
 
 export async function marcarLembreteEvento(db: SupabaseClient, gcalId: string): Promise<void> {
-  await db.from('calendar_events').update({ lembrete_enviado: true }).eq('gcal_id', gcalId);
+  const { error } = await db.from('calendar_events').update({ lembrete_enviado: true }).eq('gcal_id', gcalId);
+  if (error) throw error;
 }
 export async function marcarLembreteTarefa(db: SupabaseClient, id: string): Promise<void> {
-  await db.from('items').update({ lembrete_enviado: true }).eq('id', id);
+  const { error } = await db.from('items').update({ lembrete_enviado: true }).eq('id', id);
+  if (error) throw error;
+}
+
+// Registra o id da mensagem; retorna true se é nova, false se já foi processada (webhook duplicado).
+export async function registrarMensagem(db: SupabaseClient, messageId: string): Promise<boolean> {
+  const { error } = await db.from('processed_messages').insert({ message_id: messageId });
+  if (error) {
+    if ((error as { code?: string }).code === '23505') return false; // unique_violation
+    throw error;
+  }
+  return true;
 }
 
 export async function upsertEvento(db: SupabaseClient, ev: { gcal_id: string; titulo: string; start_at: string }): Promise<void> {

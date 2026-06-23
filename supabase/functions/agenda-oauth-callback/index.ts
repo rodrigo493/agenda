@@ -7,8 +7,12 @@ Deno.serve(async (req) => {
   const redirectUri = `${url.origin}${url.pathname}`;
   const clientId = Deno.env.get('GOOGLE_CLIENT_ID')!;
   const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET')!;
+  const gateSecret = Deno.env.get('OAUTH_GATE_SECRET') ?? '';
 
   if (url.searchParams.get('start') === '1') {
+    if (!gateSecret || url.searchParams.get('k') !== gateSecret) {
+      return new Response('não autorizado', { status: 403 });
+    }
     const auth = new URL('https://accounts.google.com/o/oauth2/v2/auth');
     auth.searchParams.set('client_id', clientId);
     auth.searchParams.set('redirect_uri', redirectUri);
@@ -16,11 +20,15 @@ Deno.serve(async (req) => {
     auth.searchParams.set('access_type', 'offline');
     auth.searchParams.set('prompt', 'consent');
     auth.searchParams.set('scope', 'https://www.googleapis.com/auth/calendar.readonly');
+    auth.searchParams.set('state', gateSecret);
     return Response.redirect(auth.toString(), 302);
   }
 
   const code = url.searchParams.get('code');
   if (!code) return new Response('faltou code', { status: 400 });
+  if (!gateSecret || url.searchParams.get('state') !== gateSecret) {
+    return new Response('state inválido', { status: 403 });
+  }
 
   const resp = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',

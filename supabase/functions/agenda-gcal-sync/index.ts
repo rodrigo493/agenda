@@ -22,7 +22,11 @@ Deno.serve(async () => {
 
     const eventos = await listarEventos(accessToken);
     for (const ev of eventos) {
-      await upsertEvento(db, { gcal_id: ev.gcal_id, titulo: ev.titulo, start_at: ev.start_at });
+      try {
+        await upsertEvento(db, { gcal_id: ev.gcal_id, titulo: ev.titulo, start_at: ev.start_at });
+      } catch (e) {
+        console.error('falha ao upsert evento', ev.gcal_id, e);
+      }
     }
     return new Response(`sincronizados ${eventos.length}`, { status: 200 });
   } catch (e) {

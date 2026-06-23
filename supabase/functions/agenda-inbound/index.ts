@@ -1,4 +1,4 @@
-import { getClient, getConfig, inserirItem, buscarItens, marcarStatus, reagendarItem }
+import { getClient, getConfig, inserirItem, buscarItens, marcarStatus, reagendarItem, registrarMensagem }
   from '../_shared/db.ts';
 import { classificarMensagem } from '../_shared/anthropic.ts';
 import { enviarWhatsApp } from '../_shared/uazapi.ts';
@@ -6,14 +6,15 @@ import { resolveReschedule } from '../_shared/datetime.ts';
 import { textoConfirmacao, textoLista, textoReformular } from '../_shared/messages.ts';
 
 // Extrai (numero, texto) do payload Uazapi. Ignora mensagens enviadas por nós (fromMe).
-function extrair(payload: any): { numero: string; texto: string } | null {
+function extrair(payload: any): { numero: string; texto: string; id: string } | null {
   const m = payload?.message ?? payload?.data?.message ?? payload;
   const fromMe = m?.fromMe ?? m?.key?.fromMe ?? false;
   if (fromMe) return null;
   const texto = m?.text ?? m?.body ?? m?.message?.conversation ?? '';
   const numero = m?.sender ?? m?.chatid ?? m?.from ?? m?.key?.remoteJid ?? '';
   if (!texto || !numero) return null;
-  return { numero: String(numero), texto: String(texto) };
+  const id = m?.id ?? m?.key?.id ?? m?.messageid ?? m?.message?.id ?? m?.messageId ?? '';
+  return { numero: String(numero), texto: String(texto), id: String(id) };
 }
 
 Deno.serve(async (req) => {
@@ -31,6 +32,11 @@ Deno.serve(async (req) => {
     const dono = soDigitos(cfg.whatsapp_numero);
     if (!dono || !remetente.endsWith(dono)) {
       return new Response('not owner', { status: 200 });
+    }
+
+    if (msg.id) {
+      const nova = await registrarMensagem(db, msg.id);
+      if (!nova) return new Response('duplicate', { status: 200 });
     }
 
     const nowISO = new Date().toISOString();
