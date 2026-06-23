@@ -43,3 +43,18 @@ test('parseIntent: extrai JSON mesmo com texto em volta', () => {
   const i = parseIntent('Claro! {"kind":"ideia","texto":"x"} pronto');
   assert.deepEqual(i, { kind: 'ideia', texto: 'x' });
 });
+
+test('parseIntent aceita listar', () => {
+  assert.deepEqual(parseIntent('{"kind":"listar","escopo":"hoje"}'),
+    { kind: 'listar', escopo: 'hoje' });
+});
+
+test('parseIntent aceita feito', () => {
+  assert.deepEqual(parseIntent('{"kind":"feito","referencia":"ligar Victor"}'),
+    { kind: 'feito', referencia: 'ligar Victor' });
+});
+
+test('parseIntent aceita cancelar', () => {
+  assert.deepEqual(parseIntent('{"kind":"cancelar","referencia":"reunião X"}'),
+    { kind: 'cancelar', referencia: 'reunião X' });
+});

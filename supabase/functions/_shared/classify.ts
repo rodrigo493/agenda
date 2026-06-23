@@ -32,14 +32,14 @@ export function parseIntent(raw: string): Intent {
   try {
     obj = JSON.parse(raw);
   } catch {
-    const m = raw.match(/\{[\s\S]*\}/);
+    const m = raw.match(/\{[\s\S]*?\}/);
     if (!m) return unknown;
     try { obj = JSON.parse(m[0]); } catch { return unknown; }
   }
   if (typeof obj !== 'object' || obj === null) return unknown;
   const o = obj as Record<string, unknown>;
   const str = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
-  const numOrNull = (v: unknown): v is number | null => v === null || typeof v === 'number';
+  const numOrNull = (v: unknown): v is number | null => v === null || (typeof v === 'number' && Number.isFinite(v));
   const dateOrNull = (v: unknown): v is string | null => v === null || (typeof v === 'string' && v.length > 0);
 
   switch (o.kind) {
