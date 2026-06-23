@@ -1,4 +1,4 @@
-import { getClient, salvarRefreshToken } from '../_shared/db.ts';
+import { getClient, salvarRefreshToken, salvarOauthState, lerOauthState } from '../_shared/db.ts';
 
 // Fluxo: o dono abre /agenda-oauth-callback?start=1 → redireciona pro consentimento Google.
 // Google volta com ?code=... → trocamos por refresh_token e gravamos.
@@ -20,14 +20,21 @@ Deno.serve(async (req) => {
     auth.searchParams.set('access_type', 'offline');
     auth.searchParams.set('prompt', 'consent');
     auth.searchParams.set('scope', 'https://www.googleapis.com/auth/calendar.readonly');
-    auth.searchParams.set('state', gateSecret);
+    const bytes = new Uint8Array(32);
+    crypto.getRandomValues(bytes);
+    const state = btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    await salvarOauthState(getClient(), state);
+    auth.searchParams.set('state', state);
     return Response.redirect(auth.toString(), 302);
   }
 
   const code = url.searchParams.get('code');
   if (!code) return new Response('faltou code', { status: 400 });
-  if (!gateSecret || url.searchParams.get('state') !== gateSecret) {
-    return new Response('state inválido', { status: 403 });
+  const incomingState = url.searchParams.get('state') ?? '';
+  const saved = await lerOauthState(getClient());
+  const ageMs = saved ? Date.now() - new Date(saved.created_at).getTime() : Infinity;
+  if (!saved || incomingState !== saved.state || ageMs > 10 * 60_000) {
+    return new Response('state inválido ou expirado', { status: 403 });
   }
 
   const resp = await fetch('https://oauth2.googleapis.com/token', {

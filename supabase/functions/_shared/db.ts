@@ -108,6 +108,17 @@ export async function upsertEvento(db: SupabaseClient, ev: { gcal_id: string; ti
   if (error) throw error;
 }
 
+export async function salvarOauthState(db: SupabaseClient, state: string): Promise<void> {
+  const { error } = await db.from('oauth_state')
+    .upsert({ id: 1, state, created_at: new Date().toISOString() });
+  if (error) throw error;
+}
+
+export async function lerOauthState(db: SupabaseClient): Promise<{ state: string; created_at: string } | null> {
+  const { data } = await db.from('oauth_state').select('state, created_at').eq('id', 1).maybeSingle();
+  return (data as { state: string; created_at: string }) ?? null;
+}
+
 export async function getRefreshToken(db: SupabaseClient): Promise<string | null> {
   const { data } = await db.from('google_auth').select('refresh_token').eq('id', 1).maybeSingle();
   return data?.refresh_token ?? null;

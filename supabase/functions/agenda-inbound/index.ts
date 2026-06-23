@@ -5,6 +5,13 @@ import { enviarWhatsApp } from '../_shared/uazapi.ts';
 import { resolveReschedule } from '../_shared/datetime.ts';
 import { textoConfirmacao, textoLista, textoReformular } from '../_shared/messages.ts';
 
+function segredoIgual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let r = 0;
+  for (let i = 0; i < a.length; i++) r |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return r === 0;
+}
+
 // Extrai (numero, texto) do payload Uazapi. Ignora mensagens enviadas por nós (fromMe).
 function extrair(payload: any): { numero: string; texto: string; id: string } | null {
   const m = payload?.message ?? payload?.data?.message ?? payload;
@@ -19,6 +26,13 @@ function extrair(payload: any): { numero: string; texto: string; id: string } | 
 
 Deno.serve(async (req) => {
   try {
+    const url = new URL(req.url);
+    const segredo = Deno.env.get('UAZAPI_WEBHOOK_SECRET') ?? '';
+    const fornecido = req.headers.get('x-webhook-token') ?? url.searchParams.get('token') ?? '';
+    if (!segredo || !segredoIgual(fornecido, segredo)) {
+      return new Response('unauthorized', { status: 401 });
+    }
+
     const payload = await req.json();
     const msg = extrair(payload);
     if (!msg) return new Response('ignored', { status: 200 });
