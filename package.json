@@ -1,0 +1,9 @@
+{
+  "name": "agenda-whatsapp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/datetime.test.ts tests/reminders.test.ts tests/classify.test.ts tests/messages.test.ts"
+  }
+}
