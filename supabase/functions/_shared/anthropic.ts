@@ -1,7 +1,6 @@
-// IMPORTANTE: @VERSAO é um placeholder. Substituir pela versão exata do SDK somente após:
-// 1) cooldown de 7 dias desde a publicação, 2) verificação em socket.dev e osv.dev.
+// Versão fixada em 23/06/2026 após cooldown (publicada 15/06/2026, 8 dias) e OSV limpo.
 // Nunca usar @latest ou ^ — versão deve ser fixada (regra de segurança de dependências).
-import Anthropic from 'npm:@anthropic-ai/sdk@VERSAO';
+import Anthropic from 'npm:@anthropic-ai/sdk@0.104.2';
 import type { Intent } from './types.ts';
 import { buildClassifyPrompt, parseIntent } from './classify.ts';
 
