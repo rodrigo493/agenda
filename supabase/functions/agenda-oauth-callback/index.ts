@@ -8,7 +8,7 @@ Deno.serve(async (req) => {
   const clientId = Deno.env.get('GOOGLE_CLIENT_ID')!;
   const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET')!;
 
-  if (url.searchParams.get('start')) {
+  if (url.searchParams.get('start') === '1') {
     const auth = new URL('https://accounts.google.com/o/oauth2/v2/auth');
     auth.searchParams.set('client_id', clientId);
     auth.searchParams.set('redirect_uri', redirectUri);
