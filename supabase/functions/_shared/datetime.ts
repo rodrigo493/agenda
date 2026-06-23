@@ -20,7 +20,7 @@ export function resolveReschedule(
 
 export function formatLocal(iso: string, tz: string): string {
   const parts = new Intl.DateTimeFormat('pt-BR', {
-    timeZone: tz, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+    timeZone: tz, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
   }).formatToParts(new Date(iso));
   const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
   return `${get('day')}/${get('month')} ${get('hour')}:${get('minute')}`;
