@@ -44,3 +44,25 @@ test('textoConfirmacao de ideia não promete lembrete', () => {
 test('textoReformular pede para reescrever', () => {
   assert.match(textoReformular(), /reformul|entendi|de novo/i);
 });
+
+test('textoConfirmacao de tarefa SEM hora não promete lembrete', () => {
+  const out = textoConfirmacao('tarefa', 'Comprar café', null, tz);
+  assert.match(out, /Comprar café/);
+  assert.doesNotMatch(out, /lembr/i);
+});
+
+test('textoLista só com ideias não mostra cabeçalho de Tarefas', () => {
+  const items = [
+    { id: '1', tipo: 'ideia', texto: 'Ideia A', due_at: null, status: 'aberto', lembrete_enviado: false, created_at: '' } as any,
+  ];
+  const out = textoLista(items, tz);
+  assert.match(out, /Ideia A/);
+  assert.doesNotMatch(out, /Tarefas:/);
+});
+
+test('textoLembrete de tarefa (não-reunião) não diz "reunião"', () => {
+  const t = { tipo: 'tarefa', id: 'i1', titulo: 'Ligar Victor', start_at: '2026-06-19T18:00:00Z' } as any;
+  const out = textoLembrete(t, tz);
+  assert.match(out, /Ligar Victor/);
+  assert.doesNotMatch(out, /reunião/i);
+});

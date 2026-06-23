@@ -15,7 +15,7 @@ export function textoLista(items: Item[], tz: string): string {
   if (tarefas.length) {
     linhas.push('*Tarefas:*');
     tarefas.forEach((t, n) => {
-      const hora = t.due_at ? ` — ${formatLocal(t.due_at, tz)}` : '';
+      const hora = t.due_at ? ` · ${formatLocal(t.due_at, tz)}` : '';
       linhas.push(`${n + 1}. ${t.texto}${hora}`);
     });
   }
