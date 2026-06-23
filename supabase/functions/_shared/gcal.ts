@@ -32,6 +32,8 @@ export async function listarEventos(accessToken: string): Promise<CalendarEvent[
   const out: CalendarEvent[] = [];
   for (const e of json.items ?? []) {
     if (!e.start?.dateTime) continue;   // pula all-day
+    const startMs = new Date(e.start.dateTime).getTime();
+    if (startMs < now.getTime()) continue;   // pula eventos passados (ex: recorrentes antigos)
     out.push({
       gcal_id: e.id, titulo: e.summary ?? '(sem título)',
       start_at: new Date(e.start.dateTime).toISOString(), lembrete_enviado: false,
