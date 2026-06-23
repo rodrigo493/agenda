@@ -4,7 +4,9 @@ import { getClient, salvarRefreshToken, salvarOauthState, lerOauthState } from '
 // Google volta com ?code=... → trocamos por refresh_token e gravamos.
 Deno.serve(async (req) => {
   const url = new URL(req.url);
-  const redirectUri = `${url.origin}${url.pathname}`;
+  // No Supabase Edge runtime, req.url reflete a rota interna (http, sem /functions/v1),
+  // o que quebra o redirect_uri do Google. Use o URI público fixo via env.
+  const redirectUri = Deno.env.get('OAUTH_REDIRECT_URI') ?? `${url.origin}${url.pathname}`;
   const clientId = Deno.env.get('GOOGLE_CLIENT_ID')!;
   const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET')!;
   const gateSecret = Deno.env.get('OAUTH_GATE_SECRET') ?? '';
