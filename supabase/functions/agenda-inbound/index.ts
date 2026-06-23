@@ -25,8 +25,11 @@ Deno.serve(async (req) => {
     const db = getClient();
     const cfg = await getConfig(db);
 
-    // Só responde ao número do dono (segurança: ninguém mais comanda a agenda).
-    if (!msg.numero.includes(cfg.whatsapp_numero)) {
+    // Gate de dono: compara só dígitos; o número do remetente deve terminar com o do dono.
+    const soDigitos = (s: string) => s.replace(/\D/g, '');
+    const remetente = soDigitos(msg.numero);
+    const dono = soDigitos(cfg.whatsapp_numero);
+    if (!dono || !remetente.endsWith(dono)) {
       return new Response('not owner', { status: 200 });
     }
 
