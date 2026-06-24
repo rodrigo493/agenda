@@ -12,14 +12,20 @@ export function buildClassifyPrompt(
     '- {"kind":"feito","referencia":string}      (referencia = trecho do texto da tarefa)',
     '- {"kind":"cancelar","referencia":string}',
     '- {"kind":"reagendar","referencia":string,"due_at":string|null,"delta_min":number|null}',
-    'Para datas/horas relativas ("amanhã 15h", "sexta de manhã", "daqui 1h"), calcule o instante absoluto',
-    'usando o agora e o fuso fornecidos e devolva em UTC. Para "snooze"/"adia X min/h" sem nova data, use delta_min.',
+    'Para datas/horas relativas ("hoje", "amanhã 15h", "sexta de manhã", "daqui 1h"), use SEMPRE a',
+    'data/hora LOCAL do usuário (linha "agora (local)") como referência — NUNCA a data UTC, pois à noite',
+    'o UTC já pode estar no dia seguinte. Ex: se "agora (local)" é 23/06 23h, então "hoje" = 23/06.',
+    'Calcule o instante absoluto e devolva em UTC (ISO com Z). Para "snooze"/"adia X min/h" use delta_min.',
     'Se não tiver certeza do que é, responda {"kind":"desconhecido"}.',
   ].join('\n');
 
+  const local = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: tz, dateStyle: 'full', timeStyle: 'short',
+  }).format(new Date(nowISO));
+
   const user = [
+    `agora (local, ${tz}): ${local}`,
     `agora (UTC): ${nowISO}`,
-    `fuso do usuário: ${tz}`,
     `mensagem: ${message}`,
   ].join('\n');
 
