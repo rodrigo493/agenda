@@ -64,3 +64,63 @@ export async function criarEvento(
   const json = await resp.json();
   return { id: json.id as string, start_at: start.toISOString() };
 }
+
+export interface EventoG { id: string; titulo: string; start_at: string }
+
+// Lista eventos com horário marcado entre from e to (ISO).
+export async function listarEventosRange(
+  accessToken: string, fromISO: string, toISO: string,
+): Promise<EventoG[]> {
+  const params = new URLSearchParams({
+    timeMin: fromISO, timeMax: toISO, singleEvents: 'true', orderBy: 'startTime', maxResults: '50',
+  });
+  const resp = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+  if (!resp.ok) throw new Error(`Google list ${resp.status}: ${await resp.text()}`);
+  const json = await resp.json();
+  const out: EventoG[] = [];
+  for (const e of json.items ?? []) {
+    if (!e.start?.dateTime) continue;
+    out.push({ id: e.id, titulo: e.summary ?? '(sem título)', start_at: new Date(e.start.dateTime).toISOString() });
+  }
+  return out;
+}
+
+// Acha o próximo evento (com hora) cujo título contém a referência (case-insensitive).
+export async function buscarEvento(
+  accessToken: string, referencia: string, fromISO: string, toISO: string,
+): Promise<EventoG | null> {
+  const evs = await listarEventosRange(accessToken, fromISO, toISO);
+  const ref = referencia.toLowerCase();
+  return evs.find((e) => e.titulo.toLowerCase().includes(ref)) ?? null;
+}
+
+export async function deletarEvento(accessToken: string, eventId: string): Promise<void> {
+  const resp = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`,
+    { method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+  if (!resp.ok && resp.status !== 410) throw new Error(`Google delete ${resp.status}: ${await resp.text()}`);
+}
+
+export async function atualizarEvento(
+  accessToken: string, eventId: string, newStartISO: string, fuso: string, durMin = 60,
+): Promise<string> {
+  const start = new Date(newStartISO);
+  const end = new Date(start.getTime() + durMin * 60_000);
+  const resp = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`,
+    {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        start: { dateTime: start.toISOString(), timeZone: fuso },
+        end: { dateTime: end.toISOString(), timeZone: fuso },
+      }),
+    },
+  );
+  if (!resp.ok) throw new Error(`Google update ${resp.status}: ${await resp.text()}`);
+  return start.toISOString();
+}

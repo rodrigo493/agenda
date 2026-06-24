@@ -1,11 +1,20 @@
-import { getClient, getConfig, inserirItem, buscarItens, marcarStatus, reagendarItem, registrarMensagem,
-  getRefreshToken, upsertEvento } from '../_shared/db.ts';
+import { getClient, getConfig, inserirItem, buscarItens, marcarStatus, registrarMensagem,
+  getRefreshToken, upsertEvento, removerEventoCache } from '../_shared/db.ts';
 import { classificarMensagem } from '../_shared/anthropic.ts';
 import { enviarWhatsApp, baixarMidiaURL } from '../_shared/uazapi.ts';
 import { transcreverAudio } from '../_shared/openai.ts';
-import { resolveReschedule, formatLocal } from '../_shared/datetime.ts';
-import { accessTokenFromRefresh, criarEvento } from '../_shared/gcal.ts';
+import { resolveReschedule, formatLocal, addMinutes } from '../_shared/datetime.ts';
+import { accessTokenFromRefresh, criarEvento, listarEventosRange, buscarEvento,
+  deletarEvento, atualizarEvento } from '../_shared/gcal.ts';
 import { textoConfirmacao, textoLista, textoReformular } from '../_shared/messages.ts';
+
+// Fim do dia de hoje no fuso local (assume Brasil, UTC-3, sem horário de verão).
+function fimDoDiaLocal(tz: string): string {
+  const ymd = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+  return new Date(`${ymd}T23:59:59-03:00`).toISOString();
+}
 
 function segredoIgual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
@@ -81,35 +90,59 @@ Deno.serve(async (req) => {
     const intent = await classificarMensagem(textoMsg, nowISO, cfg.fuso);
     let resposta: string;
 
+    // Token do Google (uma vez) para as ações que mexem na agenda.
+    const refresh = await getRefreshToken(db);
+    const gToken = refresh ? await accessTokenFromRefresh(refresh).catch(() => null) : null;
+
     switch (intent.kind) {
       case 'ideia':
         await inserirItem(db, 'ideia', intent.texto, null);
         resposta = textoConfirmacao('ideia', intent.texto, null, cfg.fuso);
         break;
       case 'tarefa':
-        if (intent.due_at) {
+        if (intent.due_at && gToken) {
           // Tem dia/hora → cria direto no Google Agenda do dono.
           try {
-            const refresh = await getRefreshToken(db);
-            if (!refresh) throw new Error('sem refresh token Google');
-            const token = await accessTokenFromRefresh(refresh);
-            const ev = await criarEvento(token, intent.texto, intent.due_at, cfg.fuso);
-            // Cache imediato para o lembrete disparar sem esperar o sync de 5 min.
+            const due = intent.due_at;
+            // Aviso de conflito: já existe algo nesse horário?
+            const conflitos = await listarEventosRange(gToken, due, addMinutes(due, 60));
+            const ev = await criarEvento(gToken, intent.texto, due, cfg.fuso);
             await upsertEvento(db, { gcal_id: ev.id, titulo: intent.texto, start_at: ev.start_at });
-            resposta = `📅 Criado no seu Google Agenda: ${intent.texto} (${formatLocal(intent.due_at, cfg.fuso)}). Te lembro ~10 min antes.`;
+            const aviso = conflitos.length
+              ? `\n⚠️ Atenção: você já tem "${conflitos[0].titulo}" nesse horário.`
+              : '';
+            resposta = `📅 Criado no seu Google Agenda: ${intent.texto} (${formatLocal(due, cfg.fuso)}). Te lembro ~10 min antes.${aviso}`;
           } catch (e) {
             console.error('falha ao criar evento Google:', e);
             await inserirItem(db, 'tarefa', intent.texto, intent.due_at);
             resposta = `${textoConfirmacao('tarefa', intent.texto, intent.due_at, cfg.fuso)}\n(não consegui criar no Google agora; guardei aqui e te lembro mesmo assim)`;
           }
+        } else if (intent.due_at) {
+          await inserirItem(db, 'tarefa', intent.texto, intent.due_at);
+          resposta = textoConfirmacao('tarefa', intent.texto, intent.due_at, cfg.fuso);
         } else {
           await inserirItem(db, 'tarefa', intent.texto, null);
           resposta = textoConfirmacao('tarefa', intent.texto, null, cfg.fuso);
         }
         break;
       case 'listar': {
-        const items = await buscarItens(db, intent.escopo);
-        resposta = textoLista(items, cfg.fuso);
+        const ideias = (await buscarItens(db, 'abertos')).filter((i) => i.tipo === 'ideia');
+        if (gToken) {
+          const toISO = intent.escopo === 'hoje' ? fimDoDiaLocal(cfg.fuso) : addMinutes(nowISO, 7 * 24 * 60);
+          const evs = await listarEventosRange(gToken, nowISO, toISO);
+          const linhas: string[] = [];
+          if (evs.length) {
+            linhas.push(intent.escopo === 'hoje' ? '*Hoje na sua agenda:*' : '*Próximos compromissos:*');
+            evs.forEach((e, n) => linhas.push(`${n + 1}. ${e.titulo} · ${formatLocal(e.start_at, cfg.fuso)}`));
+          }
+          if (ideias.length) {
+            linhas.push('*Ideias:*');
+            ideias.forEach((i) => linhas.push(`• ${i.texto}`));
+          }
+          resposta = linhas.length ? linhas.join('\n') : 'Nada na sua agenda. 🎉';
+        } else {
+          resposta = textoLista(await buscarItens(db, intent.escopo), cfg.fuso);
+        }
         break;
       }
       case 'feito': {
@@ -118,19 +151,31 @@ Deno.serve(async (req) => {
         break;
       }
       case 'cancelar': {
-        const alvo = await marcarStatus(db, intent.referencia, 'cancelado');
-        resposta = alvo ? textoConfirmacao('cancelar', alvo.texto, null, cfg.fuso) : textoReformular();
+        const janelaFim = addMinutes(nowISO, 60 * 24 * 60); // próximos 60 dias
+        const ev = gToken ? await buscarEvento(gToken, intent.referencia, nowISO, janelaFim) : null;
+        if (ev && gToken) {
+          await deletarEvento(gToken, ev.id);
+          await removerEventoCache(db, ev.id);
+          resposta = `🗑️ Cancelado na sua agenda: ${ev.titulo} (${formatLocal(ev.start_at, cfg.fuso)}).`;
+        } else {
+          const alvo = await marcarStatus(db, intent.referencia, 'cancelado');
+          resposta = alvo ? textoConfirmacao('cancelar', alvo.texto, null, cfg.fuso) : textoReformular();
+        }
         break;
       }
       case 'reagendar': {
-        // precisa do due_at atual para snooze relativo
-        const atual = (await buscarItens(db, 'abertos'))
-          .find((i) => i.texto.toLowerCase().includes(intent.referencia.toLowerCase()));
-        try {
-          const novo = resolveReschedule(atual?.due_at ?? null, intent.due_at, intent.delta_min);
-          const alvo = await reagendarItem(db, intent.referencia, novo);
-          resposta = alvo ? textoConfirmacao('reagendar', alvo.texto, novo, cfg.fuso) : textoReformular();
-        } catch {
+        const janelaFim = addMinutes(nowISO, 60 * 24 * 60);
+        const ev = gToken ? await buscarEvento(gToken, intent.referencia, nowISO, janelaFim) : null;
+        if (ev && gToken) {
+          try {
+            const novo = resolveReschedule(ev.start_at, intent.due_at, intent.delta_min);
+            const start = await atualizarEvento(gToken, ev.id, novo, cfg.fuso);
+            await upsertEvento(db, { gcal_id: ev.id, titulo: ev.titulo, start_at: start });
+            resposta = `🔁 Remarcado na sua agenda: ${ev.titulo} para ${formatLocal(start, cfg.fuso)}.`;
+          } catch {
+            resposta = textoReformular();
+          }
+        } else {
           resposta = textoReformular();
         }
         break;

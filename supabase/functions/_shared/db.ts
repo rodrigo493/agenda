@@ -119,6 +119,10 @@ export async function lerOauthState(db: SupabaseClient): Promise<{ state: string
   return (data as { state: string; created_at: string }) ?? null;
 }
 
+export async function removerEventoCache(db: SupabaseClient, gcalId: string): Promise<void> {
+  await db.from('calendar_events').delete().eq('gcal_id', gcalId);
+}
+
 export async function getRefreshToken(db: SupabaseClient): Promise<string | null> {
   const { data } = await db.from('google_auth').select('refresh_token').eq('id', 1).maybeSingle();
   return data?.refresh_token ?? null;
