@@ -97,6 +97,7 @@ export async function listarEventosRange(
   const out: EventoG[] = [];
   for (const e of json.items ?? []) {
     if (!e.start?.dateTime) continue;
+    if (new Date(e.start.dateTime).getTime() < Date.now()) continue;   // ignora passados (ex: fantasma recorrente antigo)
     out.push({ id: e.id, titulo: e.summary ?? '(sem título)', start_at: new Date(e.start.dateTime).toISOString() });
   }
   return out;
