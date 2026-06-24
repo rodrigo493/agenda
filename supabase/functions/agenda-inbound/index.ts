@@ -1,8 +1,9 @@
-import { getClient, getConfig, inserirItem, buscarItens, marcarStatus, reagendarItem, registrarMensagem }
-  from '../_shared/db.ts';
+import { getClient, getConfig, inserirItem, buscarItens, marcarStatus, reagendarItem, registrarMensagem,
+  getRefreshToken, upsertEvento } from '../_shared/db.ts';
 import { classificarMensagem } from '../_shared/anthropic.ts';
 import { enviarWhatsApp } from '../_shared/uazapi.ts';
-import { resolveReschedule } from '../_shared/datetime.ts';
+import { resolveReschedule, formatLocal } from '../_shared/datetime.ts';
+import { accessTokenFromRefresh, criarEvento } from '../_shared/gcal.ts';
 import { textoConfirmacao, textoLista, textoReformular } from '../_shared/messages.ts';
 
 function segredoIgual(a: string, b: string): boolean {
@@ -65,8 +66,25 @@ Deno.serve(async (req) => {
         resposta = textoConfirmacao('ideia', intent.texto, null, cfg.fuso);
         break;
       case 'tarefa':
-        await inserirItem(db, 'tarefa', intent.texto, intent.due_at);
-        resposta = textoConfirmacao('tarefa', intent.texto, intent.due_at, cfg.fuso);
+        if (intent.due_at) {
+          // Tem dia/hora → cria direto no Google Agenda do dono.
+          try {
+            const refresh = await getRefreshToken(db);
+            if (!refresh) throw new Error('sem refresh token Google');
+            const token = await accessTokenFromRefresh(refresh);
+            const ev = await criarEvento(token, intent.texto, intent.due_at, cfg.fuso);
+            // Cache imediato para o lembrete disparar sem esperar o sync de 5 min.
+            await upsertEvento(db, { gcal_id: ev.id, titulo: intent.texto, start_at: ev.start_at });
+            resposta = `📅 Criado no seu Google Agenda: ${intent.texto} (${formatLocal(intent.due_at, cfg.fuso)}). Te lembro ~10 min antes.`;
+          } catch (e) {
+            console.error('falha ao criar evento Google:', e);
+            await inserirItem(db, 'tarefa', intent.texto, intent.due_at);
+            resposta = `${textoConfirmacao('tarefa', intent.texto, intent.due_at, cfg.fuso)}\n(não consegui criar no Google agora; guardei aqui e te lembro mesmo assim)`;
+          }
+        } else {
+          await inserirItem(db, 'tarefa', intent.texto, null);
+          resposta = textoConfirmacao('tarefa', intent.texto, null, cfg.fuso);
+        }
         break;
       case 'listar': {
         const items = await buscarItens(db, intent.escopo);

@@ -41,3 +41,26 @@ export async function listarEventos(accessToken: string): Promise<CalendarEvent[
   }
   return out;
 }
+
+// Cria um evento no Google Agenda (requer escopo calendar.events). Retorna o id do evento.
+export async function criarEvento(
+  accessToken: string, titulo: string, startISO: string, fuso: string, durMin = 60,
+): Promise<{ id: string; start_at: string }> {
+  const start = new Date(startISO);
+  const end = new Date(start.getTime() + durMin * 60_000);
+  const resp = await fetch(
+    'https://www.googleapis.com/calendar/v3/calendars/primary/events',
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        summary: titulo,
+        start: { dateTime: start.toISOString(), timeZone: fuso },
+        end: { dateTime: end.toISOString(), timeZone: fuso },
+      }),
+    },
+  );
+  if (!resp.ok) throw new Error(`Google create ${resp.status}: ${await resp.text()}`);
+  const json = await resp.json();
+  return { id: json.id as string, start_at: start.toISOString() };
+}

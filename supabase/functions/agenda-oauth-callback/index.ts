@@ -21,7 +21,7 @@ Deno.serve(async (req) => {
     auth.searchParams.set('response_type', 'code');
     auth.searchParams.set('access_type', 'offline');
     auth.searchParams.set('prompt', 'consent');
-    auth.searchParams.set('scope', 'https://www.googleapis.com/auth/calendar.readonly');
+    auth.searchParams.set('scope', 'https://www.googleapis.com/auth/calendar.events');
     const bytes = new Uint8Array(32);
     crypto.getRandomValues(bytes);
     const state = btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
