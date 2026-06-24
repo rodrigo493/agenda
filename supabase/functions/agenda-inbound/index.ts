@@ -18,7 +18,9 @@ function extrair(payload: any): { numero: string; texto: string; id: string } | 
   const fromMe = m?.fromMe ?? m?.key?.fromMe ?? false;
   if (fromMe) return null;
   const texto = m?.text ?? m?.body ?? m?.message?.conversation ?? '';
-  const numero = m?.sender ?? m?.chatid ?? m?.from ?? m?.key?.remoteJid ?? '';
+  // sender pode vir como "@lid" (id de privacidade); o telefone real está em sender_pn/chatid.
+  const numeroRaw = m?.sender_pn ?? m?.chatid ?? m?.sender ?? m?.from ?? m?.key?.remoteJid ?? '';
+  const numero = String(numeroRaw).split('@')[0].split(':')[0];
   if (!texto || !numero) return null;
   const id = m?.id ?? m?.key?.id ?? m?.messageid ?? m?.message?.id ?? m?.messageId ?? '';
   return { numero: String(numero), texto: String(texto), id: String(id) };
