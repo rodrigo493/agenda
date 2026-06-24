@@ -1,6 +1,6 @@
 export type Intent =
   | { kind: 'ideia'; texto: string }
-  | { kind: 'tarefa'; texto: string; due_at: string | null }
+  | { kind: 'tarefa'; texto: string; due_at: string | null; convidados: string[]; video: boolean }
   | { kind: 'listar'; escopo: 'hoje' | 'abertos' }
   | { kind: 'feito'; referencia: string }
   | { kind: 'cancelar'; referencia: string }

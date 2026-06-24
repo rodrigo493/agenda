@@ -7,7 +7,9 @@ export function buildClassifyPrompt(
     'Você classifica mensagens de WhatsApp de uma agenda pessoal.',
     'Responda APENAS com um objeto JSON, sem texto em volta, com um campo "kind":',
     '- {"kind":"ideia","texto":string}',
-    '- {"kind":"tarefa","texto":string,"due_at":string|null}  (due_at em ISO 8601 UTC, com Z; null se não houver hora)',
+    '- {"kind":"tarefa","texto":string,"due_at":string|null,"convidados":string[],"video":boolean}',
+    '   (due_at em ISO 8601 UTC com Z, null se sem hora; convidados = e-mails citados, [] se nenhum;',
+    '    video = true se pedir chamada de vídeo / videochamada / Google Meet / link de reunião)',
     '- {"kind":"listar","escopo":"hoje"|"abertos"}',
     '- {"kind":"feito","referencia":string}      (referencia = trecho do texto da tarefa)',
     '- {"kind":"cancelar","referencia":string}',
@@ -51,9 +53,13 @@ export function parseIntent(raw: string): Intent {
   switch (o.kind) {
     case 'ideia':
       return str(o.texto) ? { kind: 'ideia', texto: o.texto } : unknown;
-    case 'tarefa':
-      return str(o.texto) && dateOrNull(o.due_at)
-        ? { kind: 'tarefa', texto: o.texto, due_at: o.due_at } : unknown;
+    case 'tarefa': {
+      if (!str(o.texto) || !dateOrNull(o.due_at)) return unknown;
+      const convidados = Array.isArray(o.convidados)
+        ? o.convidados.filter((x): x is string => typeof x === 'string' && x.includes('@'))
+        : [];
+      return { kind: 'tarefa', texto: o.texto, due_at: o.due_at, convidados, video: o.video === true };
+    }
     case 'listar':
       return o.escopo === 'hoje' || o.escopo === 'abertos'
         ? { kind: 'listar', escopo: o.escopo } : unknown;

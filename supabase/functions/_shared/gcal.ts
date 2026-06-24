@@ -42,27 +42,41 @@ export async function listarEventos(accessToken: string): Promise<CalendarEvent[
   return out;
 }
 
-// Cria um evento no Google Agenda (requer escopo calendar.events). Retorna o id do evento.
+// Cria um evento no Google Agenda. opts.convidados = e-mails; opts.video = cria link do Meet.
 export async function criarEvento(
-  accessToken: string, titulo: string, startISO: string, fuso: string, durMin = 60,
-): Promise<{ id: string; start_at: string }> {
+  accessToken: string, titulo: string, startISO: string, fuso: string,
+  opts: { convidados?: string[]; video?: boolean } = {}, durMin = 60,
+): Promise<{ id: string; start_at: string; meetLink: string | null }> {
   const start = new Date(startISO);
   const end = new Date(start.getTime() + durMin * 60_000);
+  const body: Record<string, unknown> = {
+    summary: titulo,
+    start: { dateTime: start.toISOString(), timeZone: fuso },
+    end: { dateTime: end.toISOString(), timeZone: fuso },
+  };
+  if (opts.convidados?.length) body.attendees = opts.convidados.map((email) => ({ email }));
+  if (opts.video) {
+    body.conferenceData = {
+      createRequest: { requestId: crypto.randomUUID(), conferenceSolutionKey: { type: 'hangoutsMeet' } },
+    };
+  }
+  const params = new URLSearchParams();
+  if (opts.video) params.set('conferenceDataVersion', '1');
+  if (opts.convidados?.length) params.set('sendUpdates', 'all');
   const resp = await fetch(
-    'https://www.googleapis.com/calendar/v3/calendars/primary/events',
+    `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`,
     {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        summary: titulo,
-        start: { dateTime: start.toISOString(), timeZone: fuso },
-        end: { dateTime: end.toISOString(), timeZone: fuso },
-      }),
+      body: JSON.stringify(body),
     },
   );
   if (!resp.ok) throw new Error(`Google create ${resp.status}: ${await resp.text()}`);
   const json = await resp.json();
-  return { id: json.id as string, start_at: start.toISOString() };
+  const meetLink = json.hangoutLink
+    ?? (json.conferenceData?.entryPoints ?? []).find((e: any) => e.entryPointType === 'video')?.uri
+    ?? null;
+  return { id: json.id as string, start_at: start.toISOString(), meetLink };
 }
 
 export interface EventoG { id: string; titulo: string; start_at: string }

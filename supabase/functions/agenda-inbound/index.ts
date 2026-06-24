@@ -119,12 +119,15 @@ Deno.serve(async (req) => {
             const due = intent.due_at;
             // Aviso de conflito: já existe algo nesse horário?
             const conflitos = await listarEventosRange(gToken, due, addMinutes(due, 60));
-            const ev = await criarEvento(gToken, intent.texto, due, cfg.fuso);
+            const ev = await criarEvento(gToken, intent.texto, due, cfg.fuso,
+              { convidados: intent.convidados, video: intent.video });
             await upsertEvento(db, { gcal_id: ev.id, titulo: intent.texto, start_at: ev.start_at });
-            const aviso = conflitos.length
-              ? `\n⚠️ Atenção: você já tem "${conflitos[0].titulo}" nesse horário.`
-              : '';
-            resposta = `📅 Criado no seu Google Agenda: ${intent.texto} (${formatLocal(due, cfg.fuso)}). Te lembro ~10 min antes.${aviso}`;
+            const extra = [
+              ev.meetLink ? `\n🎥 Meet: ${ev.meetLink}` : '',
+              intent.convidados.length ? `\n👥 Convidados: ${intent.convidados.join(', ')}` : '',
+              conflitos.length ? `\n⚠️ Você já tem "${conflitos[0].titulo}" nesse horário.` : '',
+            ].join('');
+            resposta = `📅 Criado no seu Google Agenda: ${intent.texto} (${formatLocal(due, cfg.fuso)}). Te lembro ~10 min antes.${extra}`;
           } catch (e) {
             console.error('falha ao criar evento Google:', e);
             await inserirItem(db, 'tarefa', intent.texto, intent.due_at);

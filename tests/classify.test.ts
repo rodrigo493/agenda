@@ -13,7 +13,12 @@ test('buildClassifyPrompt injeta now, fuso e a mensagem', () => {
 
 test('parseIntent aceita tarefa válida com due_at', () => {
   const i = parseIntent('{"kind":"tarefa","texto":"ligar Victor","due_at":"2026-06-20T18:00:00Z"}');
-  assert.deepEqual(i, { kind: 'tarefa', texto: 'ligar Victor', due_at: '2026-06-20T18:00:00Z' });
+  assert.deepEqual(i, { kind: 'tarefa', texto: 'ligar Victor', due_at: '2026-06-20T18:00:00Z', convidados: [], video: false });
+});
+
+test('parseIntent extrai convidados (emails) e video', () => {
+  const i = parseIntent('{"kind":"tarefa","texto":"reunião","due_at":"2026-06-20T18:00:00Z","convidados":["a@x.com","lixo","b@y.com"],"video":true}');
+  assert.deepEqual(i, { kind: 'tarefa', texto: 'reunião', due_at: '2026-06-20T18:00:00Z', convidados: ['a@x.com', 'b@y.com'], video: true });
 });
 
 test('parseIntent aceita ideia', () => {
