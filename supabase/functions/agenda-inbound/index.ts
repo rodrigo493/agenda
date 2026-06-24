@@ -1,5 +1,6 @@
 import { getClient, getConfig, inserirItem, buscarItens, marcarStatus, registrarMensagem,
-  getRefreshToken, upsertEvento, removerEventoCache } from '../_shared/db.ts';
+  getRefreshToken, upsertEvento, removerEventoCache,
+  salvarPendente, lerPendente, limparPendente } from '../_shared/db.ts';
 import { classificarMensagem } from '../_shared/anthropic.ts';
 import { enviarWhatsApp, baixarMidiaURL } from '../_shared/uazapi.ts';
 import { transcreverAudio } from '../_shared/openai.ts';
@@ -15,6 +16,20 @@ function fimDoDiaLocal(tz: string): string {
     timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
   }).format(new Date());
   return new Date(`${ymd}T23:59:59-03:00`).toISOString();
+}
+
+// Cria o evento no Google, atualiza o cache e monta a mensagem de confirmação (Meet + convidados).
+async function criarEventoCompleto(
+  db: any, gToken: string, cfg: { fuso: string },
+  titulo: string, due: string, convidados: string[], video: boolean,
+): Promise<string> {
+  const ev = await criarEvento(gToken, titulo, due, cfg.fuso, { convidados, video });
+  await upsertEvento(db, { gcal_id: ev.id, titulo, start_at: ev.start_at });
+  const extra = [
+    ev.meetLink ? `\n🎥 Meet: ${ev.meetLink}` : '',
+    convidados.length ? `\n👥 Convidados: ${convidados.join(', ')}` : '',
+  ].join('');
+  return `📅 Criado no seu Google Agenda: ${titulo} (${formatLocal(due, cfg.fuso)}). Te lembro ~10 min antes.${extra}`;
 }
 
 function segredoIgual(a: string, b: string): boolean {
@@ -88,12 +103,33 @@ Deno.serve(async (req) => {
     }
 
     const nowISO = new Date().toISOString();
-    const intent = await classificarMensagem(textoMsg, nowISO, cfg.fuso);
-    let resposta: string;
 
     // Token do Google (uma vez) para as ações que mexem na agenda.
     const refresh = await getRefreshToken(db);
     const gToken = refresh ? await accessTokenFromRefresh(refresh).catch(() => null) : null;
+
+    // Confirmação de evento pendente (fluxo de conflito): "sim" cria, "não" descarta.
+    const pend = await lerPendente(db);
+    if (pend) {
+      const t = textoMsg.trim().toLowerCase();
+      if (/^(sim|pode|confirma|confirmar|isso|ok|manda|cria|claro)\b/.test(t)) {
+        await limparPendente(db);
+        const r = gToken
+          ? await criarEventoCompleto(db, gToken, cfg, pend.titulo, pend.due_at, pend.convidados, pend.video)
+          : textoReformular();
+        await enviarWhatsApp(msg.numero, r);
+        return new Response('ok', { status: 200 });
+      }
+      if (/^(n[ãa]o|cancela|deixa|esquece|negativo)\b/.test(t)) {
+        await limparPendente(db);
+        await enviarWhatsApp(msg.numero, 'Ok, não criei. 👍');
+        return new Response('ok', { status: 200 });
+      }
+      await limparPendente(db); // qualquer outra coisa: descarta o pendente e segue
+    }
+
+    const intent = await classificarMensagem(textoMsg, nowISO, cfg.fuso);
+    let resposta: string;
 
     switch (intent.kind) {
       case 'ideia':
@@ -114,20 +150,18 @@ Deno.serve(async (req) => {
         break;
       case 'tarefa':
         if (intent.due_at && gToken) {
-          // Tem dia/hora → cria direto no Google Agenda do dono.
+          // Tem dia/hora → checa conflito; se houver, pergunta antes de criar.
           try {
             const due = intent.due_at;
-            // Aviso de conflito: já existe algo nesse horário?
             const conflitos = await listarEventosRange(gToken, due, addMinutes(due, 60));
-            const ev = await criarEvento(gToken, intent.texto, due, cfg.fuso,
-              { convidados: intent.convidados, video: intent.video });
-            await upsertEvento(db, { gcal_id: ev.id, titulo: intent.texto, start_at: ev.start_at });
-            const extra = [
-              ev.meetLink ? `\n🎥 Meet: ${ev.meetLink}` : '',
-              intent.convidados.length ? `\n👥 Convidados: ${intent.convidados.join(', ')}` : '',
-              conflitos.length ? `\n⚠️ Você já tem "${conflitos[0].titulo}" nesse horário.` : '',
-            ].join('');
-            resposta = `📅 Criado no seu Google Agenda: ${intent.texto} (${formatLocal(due, cfg.fuso)}). Te lembro ~10 min antes.${extra}`;
+            if (conflitos.length) {
+              await salvarPendente(db, {
+                titulo: intent.texto, due_at: due, convidados: intent.convidados, video: intent.video,
+              });
+              resposta = `⚠️ Você já tem "${conflitos[0].titulo}" às ${formatLocal(conflitos[0].start_at, cfg.fuso)}.\nQuer marcar "${intent.texto}" assim mesmo? Responde "sim" que eu crio.`;
+            } else {
+              resposta = await criarEventoCompleto(db, gToken, cfg, intent.texto, due, intent.convidados, intent.video);
+            }
           } catch (e) {
             console.error('falha ao criar evento Google:', e);
             await inserirItem(db, 'tarefa', intent.texto, intent.due_at);

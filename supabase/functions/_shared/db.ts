@@ -126,6 +126,27 @@ export async function removerEventoCache(db: SupabaseClient, gcalId: string): Pr
   await db.from('calendar_events').delete().eq('gcal_id', gcalId);
 }
 
+export interface Pendente { titulo: string; due_at: string; convidados: string[]; video: boolean }
+
+export async function salvarPendente(db: SupabaseClient, p: Pendente): Promise<void> {
+  const { error } = await db.from('pending_event').upsert({
+    id: 1, titulo: p.titulo, due_at: p.due_at, convidados: p.convidados, video: p.video,
+    created_at: new Date().toISOString(),
+  });
+  if (error) throw error;
+}
+
+export async function lerPendente(db: SupabaseClient): Promise<Pendente | null> {
+  const { data } = await db.from('pending_event').select('*').eq('id', 1).maybeSingle();
+  if (!data) return null;
+  if (Date.now() - new Date(data.created_at).getTime() > 10 * 60_000) return null; // expirado (10 min)
+  return { titulo: data.titulo, due_at: data.due_at, convidados: data.convidados ?? [], video: data.video };
+}
+
+export async function limparPendente(db: SupabaseClient): Promise<void> {
+  await db.from('pending_event').delete().eq('id', 1);
+}
+
 export async function getRefreshToken(db: SupabaseClient): Promise<string | null> {
   const { data } = await db.from('google_auth').select('refresh_token').eq('id', 1).maybeSingle();
   return data?.refresh_token ?? null;
