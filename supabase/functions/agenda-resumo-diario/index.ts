@@ -28,18 +28,20 @@ Deno.serve(async () => {
       : [];
     const tarefas = (await buscarItens(db, 'hoje')).filter((i) => i.tipo === 'tarefa');
 
-    const linhas: string[] = [`☀️ Bom dia! Sua agenda de hoje (${hojeStr}):`];
+    const partes: string[] = [`☀️ *Bom dia!* Sua agenda de hoje\n_${hojeStr}_`];
     if (evs.length) {
-      linhas.push('\n📅 *Reuniões:*');
-      evs.forEach((e, n) => linhas.push(`${n + 1}. ${e.titulo} · ${horaLocal(e.start_at)}`));
+      const itens = evs.map((e) => `🕐 *${horaLocal(e.start_at)}*  ${e.titulo}`).join('\n\n');
+      partes.push(`📅 *REUNIÕES* (${evs.length})\n\n${itens}`);
     }
     if (tarefas.length) {
-      linhas.push('\n✅ *Tarefas:*');
-      tarefas.forEach((t) => linhas.push(`• ${t.texto}${t.due_at ? ` · ${horaLocal(t.due_at)}` : ''}`));
+      const itens = tarefas
+        .map((t) => `🕐 *${t.due_at ? horaLocal(t.due_at) : '—'}*  ${t.texto}`)
+        .join('\n\n');
+      partes.push(`✅ *TAREFAS* (${tarefas.length})\n\n${itens}`);
     }
-    if (!evs.length && !tarefas.length) linhas.push('\nNada marcado — dia livre! 🎉');
+    if (!evs.length && !tarefas.length) partes.push('Nada marcado — dia livre! 🎉');
 
-    await enviarWhatsApp(cfg.whatsapp_numero, linhas.join('\n'));
+    await enviarWhatsApp(cfg.whatsapp_numero, partes.join('\n\n━━━━━━━━━━\n\n'));
     return new Response('ok', { status: 200 });
   } catch (e) {
     console.error('agenda-resumo-diario erro:', e);
