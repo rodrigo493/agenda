@@ -6,6 +6,7 @@ import { transcreverAudio } from '../_shared/openai.ts';
 import { resolveReschedule, formatLocal, addMinutes } from '../_shared/datetime.ts';
 import { accessTokenFromRefresh, criarEvento, listarEventosRange, buscarEvento,
   deletarEvento, atualizarEvento } from '../_shared/gcal.ts';
+import { garantirAbaIdeias, appendIdeia, lerIdeias } from '../_shared/sheets.ts';
 import { textoConfirmacao, textoLista, textoReformular } from '../_shared/messages.ts';
 
 // Fim do dia de hoje no fuso local (assume Brasil, UTC-3, sem horário de verão).
@@ -96,8 +97,20 @@ Deno.serve(async (req) => {
 
     switch (intent.kind) {
       case 'ideia':
-        await inserirItem(db, 'ideia', intent.texto, null);
-        resposta = textoConfirmacao('ideia', intent.texto, null, cfg.fuso);
+        if (gToken && cfg.sheet_ideias_id) {
+          try {
+            await garantirAbaIdeias(gToken, cfg.sheet_ideias_id);
+            await appendIdeia(gToken, cfg.sheet_ideias_id, formatLocal(nowISO, cfg.fuso), intent.texto);
+            resposta = `💡 Ideia anotada na planilha: ${intent.texto}`;
+          } catch (e) {
+            console.error('falha ao gravar ideia no Sheets:', e);
+            await inserirItem(db, 'ideia', intent.texto, null);
+            resposta = textoConfirmacao('ideia', intent.texto, null, cfg.fuso);
+          }
+        } else {
+          await inserirItem(db, 'ideia', intent.texto, null);
+          resposta = textoConfirmacao('ideia', intent.texto, null, cfg.fuso);
+        }
         break;
       case 'tarefa':
         if (intent.due_at && gToken) {
@@ -126,10 +139,10 @@ Deno.serve(async (req) => {
         }
         break;
       case 'listar': {
-        const ideias = (await buscarItens(db, 'abertos')).filter((i) => i.tipo === 'ideia');
         if (gToken) {
           const toISO = intent.escopo === 'hoje' ? fimDoDiaLocal(cfg.fuso) : addMinutes(nowISO, 7 * 24 * 60);
           const evs = await listarEventosRange(gToken, nowISO, toISO);
+          const ideias = cfg.sheet_ideias_id ? await lerIdeias(gToken, cfg.sheet_ideias_id, 10) : [];
           const linhas: string[] = [];
           if (evs.length) {
             linhas.push(intent.escopo === 'hoje' ? '*Hoje na sua agenda:*' : '*Próximos compromissos:*');
@@ -137,7 +150,7 @@ Deno.serve(async (req) => {
           }
           if (ideias.length) {
             linhas.push('*Ideias:*');
-            ideias.forEach((i) => linhas.push(`• ${i.texto}`));
+            ideias.forEach((t) => linhas.push(`• ${t}`));
           }
           resposta = linhas.length ? linhas.join('\n') : 'Nada na sua agenda. 🎉';
         } else {

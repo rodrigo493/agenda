@@ -12,7 +12,10 @@ export function getClient(): SupabaseClient {
 export async function getConfig(db: SupabaseClient) {
   const { data, error } = await db.from('config').select('*').eq('id', 1).single();
   if (error) throw error;
-  return data as { whatsapp_numero: string; uazapi_instancia: string; janela_minutos: number; fuso: string };
+  return data as {
+    whatsapp_numero: string; uazapi_instancia: string; janela_minutos: number;
+    fuso: string; sheet_ideias_id: string | null;
+  };
 }
 
 export async function inserirItem(
