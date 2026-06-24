@@ -183,7 +183,10 @@ Deno.serve(async (req) => {
           const linhas: string[] = [];
           if (evs.length) {
             linhas.push(intent.escopo === 'hoje' ? '*Hoje na sua agenda:*' : '*Próximos compromissos:*');
-            evs.forEach((e, n) => linhas.push(`${n + 1}. ${e.titulo} · ${formatLocal(e.start_at, cfg.fuso)}`));
+            evs.forEach((e, n) => {
+              linhas.push(`${n + 1}. ${e.titulo} · ${formatLocal(e.start_at, cfg.fuso)}`);
+              if (e.meetLink) linhas.push(`   🔗 ${e.meetLink}`);
+            });
           }
           if (ideias.length) {
             linhas.push('*Ideias:*');

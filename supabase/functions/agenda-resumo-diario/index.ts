@@ -30,7 +30,10 @@ Deno.serve(async () => {
 
     const partes: string[] = [`☀️ *Bom dia!* Sua agenda de hoje\n_${hojeStr}_`];
     if (evs.length) {
-      const itens = evs.map((e) => `🕐 *${horaLocal(e.start_at)}*  ${e.titulo}`).join('\n\n');
+      const itens = evs.map((e) => {
+        const base = `🕐 *${horaLocal(e.start_at)}*  ${e.titulo}`;
+        return e.meetLink ? `${base}\n🔗 ${e.meetLink}` : base;
+      }).join('\n\n');
       partes.push(`📅 *REUNIÕES* (${evs.length})\n\n${itens}`);
     }
     if (tarefas.length) {

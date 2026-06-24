@@ -79,7 +79,7 @@ export async function criarEvento(
   return { id: json.id as string, start_at: start.toISOString(), meetLink };
 }
 
-export interface EventoG { id: string; titulo: string; start_at: string }
+export interface EventoG { id: string; titulo: string; start_at: string; meetLink: string | null }
 
 // Lista eventos com horário marcado entre from e to (ISO).
 export async function listarEventosRange(
@@ -98,7 +98,10 @@ export async function listarEventosRange(
   for (const e of json.items ?? []) {
     if (!e.start?.dateTime) continue;
     if (new Date(e.start.dateTime).getTime() < Date.now()) continue;   // ignora passados (ex: fantasma recorrente antigo)
-    out.push({ id: e.id, titulo: e.summary ?? '(sem título)', start_at: new Date(e.start.dateTime).toISOString() });
+    const meetLink = e.hangoutLink
+      ?? (e.conferenceData?.entryPoints ?? []).find((p: any) => p.entryPointType === 'video')?.uri
+      ?? null;
+    out.push({ id: e.id, titulo: e.summary ?? '(sem título)', start_at: new Date(e.start.dateTime).toISOString(), meetLink });
   }
   return out;
 }
