@@ -1,7 +1,8 @@
 import { getClient, getConfig, inserirItem, buscarItens, marcarStatus, reagendarItem, registrarMensagem,
   getRefreshToken, upsertEvento } from '../_shared/db.ts';
 import { classificarMensagem } from '../_shared/anthropic.ts';
-import { enviarWhatsApp } from '../_shared/uazapi.ts';
+import { enviarWhatsApp, baixarMidiaURL } from '../_shared/uazapi.ts';
+import { transcreverAudio } from '../_shared/openai.ts';
 import { resolveReschedule, formatLocal } from '../_shared/datetime.ts';
 import { accessTokenFromRefresh, criarEvento } from '../_shared/gcal.ts';
 import { textoConfirmacao, textoLista, textoReformular } from '../_shared/messages.ts';
@@ -14,17 +15,20 @@ function segredoIgual(a: string, b: string): boolean {
 }
 
 // Extrai (numero, texto) do payload Uazapi. Ignora mensagens enviadas por nós (fromMe).
-function extrair(payload: any): { numero: string; texto: string; id: string } | null {
+function extrair(payload: any): { numero: string; texto: string; id: string; audio: boolean } | null {
   const m = payload?.message ?? payload?.data?.message ?? payload;
   const fromMe = m?.fromMe ?? m?.key?.fromMe ?? false;
   if (fromMe) return null;
-  const texto = m?.text ?? m?.body ?? m?.message?.conversation ?? '';
   // sender pode vir como "@lid" (id de privacidade); o telefone real está em sender_pn/chatid.
   const numeroRaw = m?.sender_pn ?? m?.chatid ?? m?.sender ?? m?.from ?? m?.key?.remoteJid ?? '';
   const numero = String(numeroRaw).split('@')[0].split(':')[0];
-  if (!texto || !numero) return null;
+  if (!numero) return null;
+  const mtype = String(m?.messageType ?? m?.type ?? '');
+  const audio = mtype === 'AudioMessage' || m?.content?.PTT === true || m?.mediaType === 'audio';
+  const texto = m?.text ?? m?.body ?? m?.message?.conversation ?? '';
+  if (!texto && !audio) return null;   // sem texto e sem áudio → ignora
   const id = m?.id ?? m?.key?.id ?? m?.messageid ?? m?.message?.id ?? m?.messageId ?? '';
-  return { numero: String(numero), texto: String(texto), id: String(id) };
+  return { numero: String(numero), texto: String(texto), id: String(id), audio };
 }
 
 Deno.serve(async (req) => {
@@ -56,8 +60,25 @@ Deno.serve(async (req) => {
       if (!nova) return new Response('duplicate', { status: 200 });
     }
 
+    // Áudio: baixa da Uazapi (já decriptado) e transcreve com Whisper.
+    let textoMsg = msg.texto;
+    if (msg.audio) {
+      try {
+        const fileURL = await baixarMidiaURL(msg.id);
+        textoMsg = await transcreverAudio(fileURL);
+      } catch (e) {
+        console.error('transcrição de áudio falhou:', e);
+        await enviarWhatsApp(msg.numero, '🎙️ Não consegui entender o áudio. Pode repetir ou escrever?');
+        return new Response('audio fail', { status: 200 });
+      }
+      if (!textoMsg.trim()) {
+        await enviarWhatsApp(msg.numero, '🎙️ Não captei nada no áudio. Pode repetir?');
+        return new Response('audio empty', { status: 200 });
+      }
+    }
+
     const nowISO = new Date().toISOString();
-    const intent = await classificarMensagem(msg.texto, nowISO, cfg.fuso);
+    const intent = await classificarMensagem(textoMsg, nowISO, cfg.fuso);
     let resposta: string;
 
     switch (intent.kind) {

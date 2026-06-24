@@ -11,3 +11,19 @@ export async function enviarWhatsApp(numero: string, texto: string): Promise<voi
     throw new Error(`Uazapi ${resp.status}: ${await resp.text()}`);
   }
 }
+
+// Pede à Uazapi para decriptar/hospedar a mídia de uma mensagem e devolve a URL do arquivo.
+export async function baixarMidiaURL(messageId: string): Promise<string> {
+  const url = Deno.env.get('UAZAPI_URL')!;
+  const token = Deno.env.get('UAZAPI_TOKEN')!;
+  const resp = await fetch(`${url}/message/download`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', token },
+    body: JSON.stringify({ id: messageId }),
+  });
+  if (!resp.ok) throw new Error(`Uazapi download ${resp.status}: ${await resp.text()}`);
+  const j = await resp.json();
+  const fileURL = j.fileURL ?? j.url ?? j.file;
+  if (!fileURL) throw new Error('Uazapi download sem fileURL');
+  return String(fileURL);
+}
