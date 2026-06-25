@@ -19,6 +19,9 @@ export function buildClassifyPrompt(
     '- {"kind":"ia","conteudo":string,"link":string,"comentario":string}  (use quando a mensagem for sobre',
     '   INTELIGÊNCIA ARTIFICIAL: um link de ferramenta/artigo/site de IA, ou um assunto de IA. conteudo =',
     '   resumo/assunto; link = a URL se houver, senão ""; comentario = comentário extra do usuário, senão "")',
+    '- {"kind":"email","para":string[],"assunto":string,"corpo":string}  (quando pedir para ENVIAR/MANDAR um',
+    '   e-mail. para = destinatários (converta e-mails ditados arroba→@ ponto→.); assunto = curto; corpo =',
+    '   texto do e-mail BEM ESCRITO e cordial a partir do que o usuário ditou, sem inventar fatos)',
     'Para TAREFA/evento, "texto" é só o assunto curto e limpo (ex: "Reunião com o Victor"), SEM palavras de',
     'comando ("marcar","criar evento","agendar","lembra de"), SEM data/hora, SEM e-mails e SEM "com vídeo".',
     'Ex: "marcar reunião com o Victor amanhã 15h com vídeo e convidar a@x.com"',
@@ -90,6 +93,14 @@ export function parseIntent(raw: string): Intent {
           comentario: typeof o.comentario === 'string' ? o.comentario : '',
         }
         : unknown;
+    case 'email': {
+      const para = Array.isArray(o.para)
+        ? o.para.filter((x): x is string => typeof x === 'string' && x.includes('@'))
+        : [];
+      return para.length && str(o.corpo)
+        ? { kind: 'email', para, assunto: typeof o.assunto === 'string' ? o.assunto : '(sem assunto)', corpo: o.corpo }
+        : unknown;
+    }
     default:
       return unknown;
   }

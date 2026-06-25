@@ -1,6 +1,8 @@
 import { getClient, getConfig, inserirItem, buscarItens, marcarStatus, registrarMensagem,
   getRefreshToken, upsertEvento, removerEventoCache,
-  salvarPendente, lerPendente, limparPendente } from '../_shared/db.ts';
+  salvarPendente, lerPendente, limparPendente,
+  salvarPendenteEmail, lerPendenteEmail, limparPendenteEmail } from '../_shared/db.ts';
+import { enviarEmail } from '../_shared/gmail.ts';
 import { classificarMensagem, interpretarImagem } from '../_shared/anthropic.ts';
 import { enviarWhatsApp, baixarMidiaURL } from '../_shared/uazapi.ts';
 import { transcreverAudio } from '../_shared/openai.ts';
@@ -142,6 +144,30 @@ Deno.serve(async (req) => {
       return new Response('ok', { status: 200 });
     }
 
+    // Confirmação de e-mail pendente: "sim" envia, "não" descarta.
+    const pendEmail = await lerPendenteEmail(db);
+    if (pendEmail) {
+      const t = textoMsg.trim().toLowerCase();
+      if (/^(sim|pode|confirma|confirmar|isso|ok|manda|envia|enviar|claro)\b/.test(t)) {
+        await limparPendenteEmail(db);
+        try {
+          if (!gToken) throw new Error('sem Google');
+          await enviarEmail(gToken, pendEmail.para, pendEmail.assunto, pendEmail.corpo);
+          await enviarWhatsApp(msg.numero, `📧 E-mail enviado para ${pendEmail.para.join(', ')}.`);
+        } catch (e) {
+          console.error('falha ao enviar email:', e);
+          await enviarWhatsApp(msg.numero, '📧 Não consegui enviar. Verifique se a Gmail API está ativa e reautorize.');
+        }
+        return new Response('ok', { status: 200 });
+      }
+      if (/^(n[ãa]o|cancela|deixa|esquece|negativo)\b/.test(t)) {
+        await limparPendenteEmail(db);
+        await enviarWhatsApp(msg.numero, 'Ok, não enviei o e-mail. 👍');
+        return new Response('ok', { status: 200 });
+      }
+      await limparPendenteEmail(db);
+    }
+
     // Confirmação de evento pendente (fluxo de conflito): "sim" cria, "não" descarta.
     const pend = await lerPendente(db);
     if (pend) {
@@ -281,6 +307,11 @@ Deno.serve(async (req) => {
         } else {
           resposta = textoReformular();
         }
+        break;
+      }
+      case 'email': {
+        await salvarPendenteEmail(db, { para: intent.para, assunto: intent.assunto, corpo: intent.corpo });
+        resposta = `📧 Vou enviar para *${intent.para.join(', ')}*\nAssunto: ${intent.assunto}\n\n${intent.corpo}\n\n— Confirma o envio? Responde "sim".`;
         break;
       }
       default:

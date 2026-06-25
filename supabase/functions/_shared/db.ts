@@ -147,6 +147,26 @@ export async function limparPendente(db: SupabaseClient): Promise<void> {
   await db.from('pending_event').delete().eq('id', 1);
 }
 
+export interface PendenteEmail { para: string[]; assunto: string; corpo: string }
+
+export async function salvarPendenteEmail(db: SupabaseClient, p: PendenteEmail): Promise<void> {
+  const { error } = await db.from('pending_email').upsert({
+    id: 1, para: p.para, assunto: p.assunto, corpo: p.corpo, created_at: new Date().toISOString(),
+  });
+  if (error) throw error;
+}
+
+export async function lerPendenteEmail(db: SupabaseClient): Promise<PendenteEmail | null> {
+  const { data } = await db.from('pending_email').select('*').eq('id', 1).maybeSingle();
+  if (!data) return null;
+  if (Date.now() - new Date(data.created_at).getTime() > 10 * 60_000) return null;
+  return { para: data.para ?? [], assunto: data.assunto, corpo: data.corpo };
+}
+
+export async function limparPendenteEmail(db: SupabaseClient): Promise<void> {
+  await db.from('pending_email').delete().eq('id', 1);
+}
+
 export async function getRefreshToken(db: SupabaseClient): Promise<string | null> {
   const { data } = await db.from('google_auth').select('refresh_token').eq('id', 1).maybeSingle();
   return data?.refresh_token ?? null;
