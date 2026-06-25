@@ -1,13 +1,15 @@
 import { getClient, getConfig, inserirItem, buscarItens, marcarStatus, registrarMensagem,
   getRefreshToken, upsertEvento, removerEventoCache,
   salvarPendente, lerPendente, limparPendente } from '../_shared/db.ts';
-import { classificarMensagem, interpretarImagemIA } from '../_shared/anthropic.ts';
+import { classificarMensagem } from '../_shared/anthropic.ts';
 import { enviarWhatsApp, baixarMidiaURL } from '../_shared/uazapi.ts';
 import { transcreverAudio } from '../_shared/openai.ts';
+import { uploadImagem } from '../_shared/storage.ts';
 import { resolveReschedule, formatLocal, addMinutes } from '../_shared/datetime.ts';
 import { accessTokenFromRefresh, criarEvento, listarEventosRange, buscarEvento,
   deletarEvento, atualizarEvento } from '../_shared/gcal.ts';
-import { garantirAbaIdeias, appendIdeia, lerIdeias, garantirAbaIA, appendIA } from '../_shared/sheets.ts';
+import { garantirAbaIdeias, appendIdeia, lerIdeias, garantirAbaIA, appendIA,
+  garantirAbaImagens, appendImagem } from '../_shared/sheets.ts';
 import { textoConfirmacao, textoLista, textoReformular } from '../_shared/messages.ts';
 
 // Fim do dia de hoje no fuso local (assume Brasil, UTC-3, sem horário de verão).
@@ -109,7 +111,7 @@ Deno.serve(async (req) => {
     const refresh = await getRefreshToken(db);
     const gToken = refresh ? await accessTokenFromRefresh(refresh).catch(() => null) : null;
 
-    // Imagem (print) → interpreta com a visão do Claude e salva na aba IA.
+    // Imagem → hospeda no Storage e insere na aba "imagens" (com coluna de comentário).
     if (msg.imagem) {
       if (!gToken || !cfg.sheet_ideias_id) {
         await enviarWhatsApp(msg.numero, '🖼️ Recebi a imagem, mas a planilha/Google não está conectada agora.');
@@ -117,14 +119,16 @@ Deno.serve(async (req) => {
       }
       try {
         const fileURL = await baixarMidiaURL(msg.id);
-        const { conteudo, link } = await interpretarImagemIA(fileURL, msg.texto);
-        await garantirAbaIA(gToken, cfg.sheet_ideias_id);
-        await appendIA(gToken, cfg.sheet_ideias_id, formatLocal(nowISO, cfg.fuso), conteudo, link, msg.texto);
-        const corte = conteudo.length > 350 ? `${conteudo.slice(0, 350)}…` : conteudo;
-        await enviarWhatsApp(msg.numero, `🤖 Print de IA interpretado e salvo na aba *IA*:\n\n${corte}${link ? `\n🔗 ${link}` : ''}`);
+        const img = await fetch(fileURL);
+        const bytes = new Uint8Array(await img.arrayBuffer());
+        const ctype = img.headers.get('content-type') ?? 'image/jpeg';
+        const publicUrl = await uploadImagem(bytes, ctype);
+        await garantirAbaImagens(gToken, cfg.sheet_ideias_id);
+        await appendImagem(gToken, cfg.sheet_ideias_id, formatLocal(nowISO, cfg.fuso), publicUrl, msg.texto);
+        await enviarWhatsApp(msg.numero, '🖼️ Imagem salva na aba *imagens* da planilha.');
       } catch (e) {
-        console.error('falha ao processar imagem IA:', e);
-        await enviarWhatsApp(msg.numero, '🖼️ Não consegui processar a imagem. Pode reenviar?');
+        console.error('falha ao salvar imagem:', e);
+        await enviarWhatsApp(msg.numero, '🖼️ Não consegui salvar a imagem. Pode reenviar?');
       }
       return new Response('ok', { status: 200 });
     }
