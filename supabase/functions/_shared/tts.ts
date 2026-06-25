@@ -6,7 +6,7 @@ export async function sintetizarVoz(texto: string, languageCode: string): Promis
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       input: { text: texto },
-      voice: { languageCode },
+      voice: { languageCode, ssmlGender: 'MALE' },
       audioConfig: { audioEncoding: 'MP3' },
     }),
   });
