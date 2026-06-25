@@ -41,6 +41,8 @@ export function buildClassifyPrompt(
     'Calcule o instante absoluto e devolva em UTC (ISO com Z). Para "snooze"/"adia X min/h" use delta_min.',
     'REGRA FORTE: se a mensagem começar com a palavra "ideia" (ditada ou escrita), classifique SEMPRE como',
     'kind "ideia", com texto = todo o conteúdo após "ideia" (completo, fiel, sem resumir).',
+    'REGRA FORTE: se a mensagem começar com "traduz"/"traduzir"/"tradução", classifique SEMPRE como kind',
+    '"traduzir" (texto = o conteúdo a traduzir; idioma padrão en-US se não disserem; formato áudio salvo se pedir texto).',
     'Se não tiver certeza do que é, responda {"kind":"desconhecido"}.',
   ].join('\n');
 
