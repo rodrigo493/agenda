@@ -8,7 +8,7 @@ export async function transcreverAudio(fileURL: string): Promise<string> {
   const form = new FormData();
   form.append('file', blob, 'audio.mp3');   // Groq valida pela extensão; Uazapi entrega mp3
   form.append('model', 'whisper-large-v3-turbo');
-  form.append('language', 'pt');
+  // sem 'language' fixo: deixa o Whisper detectar (permite áudio em inglês/espanhol → traduzir pro PT)
 
   const resp = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
     method: 'POST',

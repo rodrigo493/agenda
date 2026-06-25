@@ -43,6 +43,8 @@ export function buildClassifyPrompt(
     'kind "ideia", com texto = todo o conteúdo após "ideia" (completo, fiel, sem resumir).',
     'REGRA FORTE: se a mensagem começar com "traduz"/"traduzir"/"tradução", classifique SEMPRE como kind',
     '"traduzir" (texto = o conteúdo a traduzir; idioma padrão en-US se não disserem; formato áudio salvo se pedir texto).',
+    'REGRA FORTE: se a mensagem estiver em OUTRO idioma que não português (ex: inglês, espanhol) e NÃO for um',
+    'comando, classifique como kind "traduzir" com idioma "pt-BR", formato "audio", texto = a mensagem original.',
     'Se não tiver certeza do que é, responda {"kind":"desconhecido"}.',
   ].join('\n');
 
