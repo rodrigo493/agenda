@@ -39,6 +39,8 @@ export function buildClassifyPrompt(
     'data/hora LOCAL do usuário (linha "agora (local)") como referência — NUNCA a data UTC, pois à noite',
     'o UTC já pode estar no dia seguinte. Ex: se "agora (local)" é 23/06 23h, então "hoje" = 23/06.',
     'Calcule o instante absoluto e devolva em UTC (ISO com Z). Para "snooze"/"adia X min/h" use delta_min.',
+    'REGRA FORTE: se a mensagem começar com a palavra "ideia" (ditada ou escrita), classifique SEMPRE como',
+    'kind "ideia", com texto = todo o conteúdo após "ideia" (completo, fiel, sem resumir).',
     'Se não tiver certeza do que é, responda {"kind":"desconhecido"}.',
   ].join('\n');
 
