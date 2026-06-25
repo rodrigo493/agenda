@@ -95,7 +95,7 @@ export function parseIntent(raw: string): Intent {
         : unknown;
     case 'email': {
       const para = Array.isArray(o.para)
-        ? o.para.filter((x): x is string => typeof x === 'string' && x.includes('@'))
+        ? o.para.filter((x): x is string => typeof x === 'string' && /^[^\s<>"',;\r\n]+@[^\s<>"',;\r\n]+$/.test(x))
         : [];
       return para.length && str(o.corpo)
         ? { kind: 'email', para, assunto: typeof o.assunto === 'string' ? o.assunto : '(sem assunto)', corpo: o.corpo }
