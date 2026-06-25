@@ -167,6 +167,26 @@ export async function limparPendenteEmail(db: SupabaseClient): Promise<void> {
   await db.from('pending_email').delete().eq('id', 1);
 }
 
+export interface UltimaImagem { aba: string; col: string; row: number }
+
+export async function salvarUltimaImagem(db: SupabaseClient, u: UltimaImagem): Promise<void> {
+  const { error } = await db.from('last_image').upsert({
+    id: 1, aba: u.aba, col: u.col, row: u.row, created_at: new Date().toISOString(),
+  });
+  if (error) throw error;
+}
+
+export async function lerUltimaImagem(db: SupabaseClient): Promise<UltimaImagem | null> {
+  const { data } = await db.from('last_image').select('*').eq('id', 1).maybeSingle();
+  if (!data) return null;
+  if (Date.now() - new Date(data.created_at).getTime() > 5 * 60_000) return null; // 5 min
+  return { aba: data.aba, col: data.col, row: data.row };
+}
+
+export async function limparUltimaImagem(db: SupabaseClient): Promise<void> {
+  await db.from('last_image').delete().eq('id', 1);
+}
+
 export async function getRefreshToken(db: SupabaseClient): Promise<string | null> {
   const { data } = await db.from('google_auth').select('refresh_token').eq('id', 1).maybeSingle();
   return data?.refresh_token ?? null;

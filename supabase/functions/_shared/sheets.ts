@@ -68,7 +68,7 @@ export async function garantirAbaIA(accessToken: string, sheetId: string): Promi
 export async function appendIA(
   accessToken: string, sheetId: string,
   data: string, conteudo: string, link: string, comentario: string, imageUrl = '',
-): Promise<void> {
+): Promise<number> {
   const meta = await api(accessToken, 'GET', `${sheetId}?fields=sheets.properties`);
   const gid = (meta.sheets ?? []).find((s: any) => s.properties?.title === ABA_IA)?.properties?.sheetId;
   const imgCell = imageUrl ? `=IMAGE("${imageUrl}")` : '';
@@ -77,20 +77,20 @@ export async function appendIA(
     `${sheetId}/values/${ABA_IA}!A:E:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
     { values: [[data, conteudo, link, comentario, imgCell]] },
   );
+  const m = String(res.updates?.updatedRange ?? '').match(/!A(\d+)/);
+  if (!m) return 0;
+  const linha = Number(m[1]);
   if (imageUrl && gid != null) {
-    const m = String(res.updates?.updatedRange ?? '').match(/!A(\d+)/);
-    if (m) {
-      const row = Number(m[1]) - 1;
-      await api(accessToken, 'POST', `${sheetId}:batchUpdate`, {
-        requests: [{
-          updateDimensionProperties: {
-            range: { sheetId: gid, dimension: 'ROWS', startIndex: row, endIndex: row + 1 },
-            properties: { pixelSize: 120 }, fields: 'pixelSize',
-          },
-        }],
-      });
-    }
+    await api(accessToken, 'POST', `${sheetId}:batchUpdate`, {
+      requests: [{
+        updateDimensionProperties: {
+          range: { sheetId: gid, dimension: 'ROWS', startIndex: linha - 1, endIndex: linha },
+          properties: { pixelSize: 120 }, fields: 'pixelSize',
+        },
+      }],
+    });
   }
+  return linha;
 }
 
 const ABA_IMG = 'imagens';
@@ -121,7 +121,7 @@ export async function garantirAbaImagens(accessToken: string, sheetId: string): 
 // Insere uma imagem (via =IMAGE) numa nova linha e deixa a linha alta o suficiente para vê-la.
 export async function appendImagem(
   accessToken: string, sheetId: string, data: string, imageUrl: string, comentario: string,
-): Promise<void> {
+): Promise<number> {
   const meta = await api(accessToken, 'GET', `${sheetId}?fields=sheets.properties`);
   const gid = (meta.sheets ?? []).find((s: any) => s.properties?.title === ABA_IMG)?.properties?.sheetId;
   const res = await api(
@@ -130,17 +130,26 @@ export async function appendImagem(
     { values: [[data, `=IMAGE("${imageUrl}")`, comentario]] },
   );
   const m = String(res.updates?.updatedRange ?? '').match(/!A(\d+)/);
-  if (gid != null && m) {
-    const row = Number(m[1]) - 1;
+  if (!m) return 0;
+  const linha = Number(m[1]);
+  if (gid != null) {
     await api(accessToken, 'POST', `${sheetId}:batchUpdate`, {
       requests: [{
         updateDimensionProperties: {
-          range: { sheetId: gid, dimension: 'ROWS', startIndex: row, endIndex: row + 1 },
+          range: { sheetId: gid, dimension: 'ROWS', startIndex: linha - 1, endIndex: linha },
           properties: { pixelSize: 120 }, fields: 'pixelSize',
         },
       }],
     });
   }
+  return linha;
+}
+
+// Atualiza uma célula (ex: anexar comentário a uma imagem já inserida). Texto literal (RAW).
+export async function atualizarCelula(
+  accessToken: string, sheetId: string, a1range: string, valor: string,
+): Promise<void> {
+  await api(accessToken, 'PUT', `${sheetId}/values/${a1range}?valueInputOption=RAW`, { values: [[valor]] });
 }
 
 // Lê as últimas ideias da aba (coluna B).

@@ -1,7 +1,8 @@
 import { getClient, getConfig, inserirItem, buscarItens, marcarStatus, registrarMensagem,
   getRefreshToken, upsertEvento, removerEventoCache,
   salvarPendente, lerPendente, limparPendente,
-  salvarPendenteEmail, lerPendenteEmail, limparPendenteEmail } from '../_shared/db.ts';
+  salvarPendenteEmail, lerPendenteEmail, limparPendenteEmail,
+  salvarUltimaImagem, lerUltimaImagem, limparUltimaImagem } from '../_shared/db.ts';
 import { enviarEmail } from '../_shared/gmail.ts';
 import { classificarMensagem, interpretarImagem } from '../_shared/anthropic.ts';
 import { enviarWhatsApp, baixarMidiaURL } from '../_shared/uazapi.ts';
@@ -11,7 +12,7 @@ import { resolveReschedule, formatLocal, addMinutes } from '../_shared/datetime.
 import { accessTokenFromRefresh, criarEvento, listarEventosRange, buscarEvento,
   deletarEvento, atualizarEvento } from '../_shared/gcal.ts';
 import { garantirAbaIdeias, appendIdeia, lerIdeias, garantirAbaIA, appendIA,
-  garantirAbaImagens, appendImagem } from '../_shared/sheets.ts';
+  garantirAbaImagens, appendImagem, atualizarCelula } from '../_shared/sheets.ts';
 import { textoConfirmacao, textoLista, textoReformular } from '../_shared/messages.ts';
 
 // Fim do dia de hoje no fuso local (assume Brasil, UTC-3, sem horário de verão).
@@ -129,13 +130,17 @@ Deno.serve(async (req) => {
         const dataLocal = formatLocal(nowISO, cfg.fuso);
         if (ehIA) {
           await garantirAbaIA(gToken, cfg.sheet_ideias_id);
-          await appendIA(gToken, cfg.sheet_ideias_id, dataLocal, conteudo, link, msg.texto, publicUrl);
+          const linha = await appendIA(gToken, cfg.sheet_ideias_id, dataLocal, conteudo, link, msg.texto, publicUrl);
+          if (!msg.texto && linha) await salvarUltimaImagem(db, { aba: 'IA', col: 'D', row: linha });
           const corte = conteudo.length > 350 ? `${conteudo.slice(0, 350)}…` : conteudo;
-          await enviarWhatsApp(msg.numero, `🤖 Print de IA interpretado e salvo na aba *IA* (com a imagem):\n\n${corte}${link ? `\n🔗 ${link}` : ''}`);
+          const dica = msg.texto ? '' : '\n\n💬 Quer comentar? Manda o comentário na próxima mensagem.';
+          await enviarWhatsApp(msg.numero, `🤖 Print de IA interpretado e salvo na aba *IA* (com a imagem):\n\n${corte}${link ? `\n🔗 ${link}` : ''}${dica}`);
         } else {
           await garantirAbaImagens(gToken, cfg.sheet_ideias_id);
-          await appendImagem(gToken, cfg.sheet_ideias_id, dataLocal, publicUrl, msg.texto);
-          await enviarWhatsApp(msg.numero, '🖼️ Imagem salva na aba *imagens* da planilha.');
+          const linha = await appendImagem(gToken, cfg.sheet_ideias_id, dataLocal, publicUrl, msg.texto);
+          if (!msg.texto && linha) await salvarUltimaImagem(db, { aba: 'imagens', col: 'C', row: linha });
+          const dica = msg.texto ? '' : '\n💬 Quer comentar? Manda o comentário na próxima mensagem.';
+          await enviarWhatsApp(msg.numero, `🖼️ Imagem salva na aba *imagens*.${dica}`);
         }
       } catch (e) {
         console.error('falha ao processar imagem:', e);
@@ -189,6 +194,17 @@ Deno.serve(async (req) => {
     }
 
     const intent = await classificarMensagem(textoMsg, nowISO, cfg.fuso);
+
+    // Comentário avulso logo após uma imagem sem legenda → anexa à última imagem (em vez de virar ideia).
+    const ultimaImg = await lerUltimaImagem(db);
+    if (ultimaImg && gToken && cfg.sheet_ideias_id && (intent.kind === 'ideia' || intent.kind === 'desconhecido')) {
+      await atualizarCelula(gToken, cfg.sheet_ideias_id, `${ultimaImg.aba}!${ultimaImg.col}${ultimaImg.row}`, textoMsg.trim());
+      await limparUltimaImagem(db);
+      await enviarWhatsApp(msg.numero, '✏️ Comentário anexado à última imagem.');
+      return new Response('ok', { status: 200 });
+    }
+    if (ultimaImg) await limparUltimaImagem(db);
+
     let resposta: string;
 
     switch (intent.kind) {
