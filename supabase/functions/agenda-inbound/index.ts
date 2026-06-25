@@ -37,6 +37,20 @@ async function criarEventoCompleto(
   return `📅 Criado no seu Google Agenda: ${titulo} (${formatLocal(due, cfg.fuso)}). Te lembro ~10 min antes.${extra}`;
 }
 
+// Extrai e-mails de um texto, digitado ou ditado ("x arroba y ponto z").
+function emailsDeTexto(texto: string): string[] {
+  const re = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+  let achados = texto.match(re) ?? [];
+  if (!achados.length && /arroba/i.test(texto)) {
+    const conv = texto.toLowerCase()
+      .replace(/\s*arroba\s*/g, '@')
+      .replace(/\s*ponto\s*/g, '.')
+      .replace(/\s+/g, '');
+    achados = conv.match(re) ?? [];
+  }
+  return achados;
+}
+
 function segredoIgual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let r = 0;
@@ -153,7 +167,14 @@ Deno.serve(async (req) => {
     const pendEmail = await lerPendenteEmail(db);
     if (pendEmail) {
       const t = textoMsg.trim().toLowerCase();
-      if (/^(sim|pode|confirma|confirmar|isso|ok|manda|envia|enviar|claro)\b/.test(t)) {
+      // Correção do destinatário: mandou um e-mail (digitado ou ditado) → atualiza e re-pergunta.
+      const corrigidos = emailsDeTexto(textoMsg);
+      if (corrigidos.length) {
+        await salvarPendenteEmail(db, { para: corrigidos, assunto: pendEmail.assunto, corpo: pendEmail.corpo });
+        await enviarWhatsApp(msg.numero, `📧 Destinatário corrigido para *${corrigidos.join(', ')}*\nAssunto: ${pendEmail.assunto}\n\n${pendEmail.corpo}\n\nConfirma o envio? Responde "sim".`);
+        return new Response('ok', { status: 200 });
+      }
+      if (/^(sim|pode|confirma|confirmar|isso|ok|claro|envia|enviar|pode enviar)\b/.test(t)) {
         await limparPendenteEmail(db);
         try {
           if (!gToken) throw new Error('sem Google');
@@ -327,7 +348,7 @@ Deno.serve(async (req) => {
       }
       case 'email': {
         await salvarPendenteEmail(db, { para: intent.para, assunto: intent.assunto, corpo: intent.corpo });
-        resposta = `📧 Vou enviar para *${intent.para.join(', ')}*\nAssunto: ${intent.assunto}\n\n${intent.corpo}\n\n— Confirma o envio? Responde "sim".`;
+        resposta = `📧 Vou enviar para *${intent.para.join(', ')}*\nAssunto: ${intent.assunto}\n\n${intent.corpo}\n\n— Confirma? Responde "sim". Se o e-mail estiver errado, manda o correto agora que eu corrijo.`;
         break;
       }
       default:
