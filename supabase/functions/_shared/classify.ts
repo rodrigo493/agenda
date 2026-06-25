@@ -45,6 +45,9 @@ export function buildClassifyPrompt(
     '"traduzir" (texto = o conteúdo a traduzir; idioma padrão en-US se não disserem; formato áudio salvo se pedir texto).',
     'REGRA FORTE: se a mensagem estiver em OUTRO idioma que não português (ex: inglês, espanhol) e NÃO for um',
     'comando, classifique como kind "traduzir" com idioma "pt-BR", formato "audio", texto = a mensagem original.',
+    'REGRA FORTE: se a mensagem estiver em PORTUGUÊS e for apenas uma frase/texto comum (NÃO um comando de',
+    'agenda/ideia/e-mail nem começar com "traduz"), trate como texto para TRADUZIR para inglês: kind "traduzir",',
+    'idioma "en-US", formato "audio", texto = a mensagem. (Comandos sempre vêm antes desta regra.)',
     'Se não tiver certeza do que é, responda {"kind":"desconhecido"}.',
   ].join('\n');
 
