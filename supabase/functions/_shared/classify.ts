@@ -15,6 +15,9 @@ export function buildClassifyPrompt(
     '- {"kind":"feito","referencia":string}      (referencia = trecho do texto da tarefa)',
     '- {"kind":"cancelar","referencia":string}',
     '- {"kind":"reagendar","referencia":string,"due_at":string|null,"delta_min":number|null}',
+    '- {"kind":"ia","conteudo":string,"link":string,"comentario":string}  (use quando a mensagem for sobre',
+    '   INTELIGÊNCIA ARTIFICIAL: um link de ferramenta/artigo/site de IA, ou um assunto de IA. conteudo =',
+    '   resumo/assunto; link = a URL se houver, senão ""; comentario = comentário extra do usuário, senão "")',
     'Para TAREFA/evento, "texto" é só o assunto curto e limpo (ex: "Reunião com o Victor"), SEM palavras de',
     'comando ("marcar","criar evento","agendar","lembra de"), SEM data/hora, SEM e-mails e SEM "com vídeo".',
     'Ex: "marcar reunião com o Victor amanhã 15h com vídeo e convidar a@x.com"',
@@ -77,6 +80,15 @@ export function parseIntent(raw: string): Intent {
     case 'reagendar':
       return str(o.referencia) && dateOrNull(o.due_at) && numOrNull(o.delta_min)
         ? { kind: 'reagendar', referencia: o.referencia, due_at: o.due_at, delta_min: o.delta_min } : unknown;
+    case 'ia':
+      return str(o.conteudo)
+        ? {
+          kind: 'ia',
+          conteudo: o.conteudo,
+          link: typeof o.link === 'string' ? o.link : '',
+          comentario: typeof o.comentario === 'string' ? o.comentario : '',
+        }
+        : unknown;
     default:
       return unknown;
   }

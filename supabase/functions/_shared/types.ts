@@ -5,6 +5,7 @@ export type Intent =
   | { kind: 'feito'; referencia: string }
   | { kind: 'cancelar'; referencia: string }
   | { kind: 'reagendar'; referencia: string; due_at: string | null; delta_min: number | null }
+  | { kind: 'ia'; conteudo: string; link: string; comentario: string }
   | { kind: 'desconhecido' };
 
 export interface Item {

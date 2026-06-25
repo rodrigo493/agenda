@@ -1,13 +1,13 @@
 import { getClient, getConfig, inserirItem, buscarItens, marcarStatus, registrarMensagem,
   getRefreshToken, upsertEvento, removerEventoCache,
   salvarPendente, lerPendente, limparPendente } from '../_shared/db.ts';
-import { classificarMensagem } from '../_shared/anthropic.ts';
+import { classificarMensagem, interpretarImagemIA } from '../_shared/anthropic.ts';
 import { enviarWhatsApp, baixarMidiaURL } from '../_shared/uazapi.ts';
 import { transcreverAudio } from '../_shared/openai.ts';
 import { resolveReschedule, formatLocal, addMinutes } from '../_shared/datetime.ts';
 import { accessTokenFromRefresh, criarEvento, listarEventosRange, buscarEvento,
   deletarEvento, atualizarEvento } from '../_shared/gcal.ts';
-import { garantirAbaIdeias, appendIdeia, lerIdeias } from '../_shared/sheets.ts';
+import { garantirAbaIdeias, appendIdeia, lerIdeias, garantirAbaIA, appendIA } from '../_shared/sheets.ts';
 import { textoConfirmacao, textoLista, textoReformular } from '../_shared/messages.ts';
 
 // Fim do dia de hoje no fuso local (assume Brasil, UTC-3, sem horário de verão).
@@ -40,7 +40,7 @@ function segredoIgual(a: string, b: string): boolean {
 }
 
 // Extrai (numero, texto) do payload Uazapi. Ignora mensagens enviadas por nós (fromMe).
-function extrair(payload: any): { numero: string; texto: string; id: string; audio: boolean } | null {
+function extrair(payload: any): { numero: string; texto: string; id: string; audio: boolean; imagem: boolean } | null {
   const m = payload?.message ?? payload?.data?.message ?? payload;
   const fromMe = m?.fromMe ?? m?.key?.fromMe ?? false;
   if (fromMe) return null;
@@ -50,10 +50,11 @@ function extrair(payload: any): { numero: string; texto: string; id: string; aud
   if (!numero) return null;
   const mtype = String(m?.messageType ?? m?.type ?? '');
   const audio = mtype === 'AudioMessage' || m?.content?.PTT === true || m?.mediaType === 'audio';
-  const texto = m?.text ?? m?.body ?? m?.message?.conversation ?? '';
-  if (!texto && !audio) return null;   // sem texto e sem áudio → ignora
+  const imagem = mtype === 'ImageMessage' || m?.mediaType === 'image';
+  const texto = m?.text ?? m?.body ?? m?.message?.conversation ?? m?.content?.caption ?? '';
+  if (!texto && !audio && !imagem) return null;   // sem texto/áudio/imagem → ignora
   const id = m?.id ?? m?.key?.id ?? m?.messageid ?? m?.message?.id ?? m?.messageId ?? '';
-  return { numero: String(numero), texto: String(texto), id: String(id), audio };
+  return { numero: String(numero), texto: String(texto), id: String(id), audio, imagem };
 }
 
 Deno.serve(async (req) => {
@@ -107,6 +108,26 @@ Deno.serve(async (req) => {
     // Token do Google (uma vez) para as ações que mexem na agenda.
     const refresh = await getRefreshToken(db);
     const gToken = refresh ? await accessTokenFromRefresh(refresh).catch(() => null) : null;
+
+    // Imagem (print) → interpreta com a visão do Claude e salva na aba IA.
+    if (msg.imagem) {
+      if (!gToken || !cfg.sheet_ideias_id) {
+        await enviarWhatsApp(msg.numero, '🖼️ Recebi a imagem, mas a planilha/Google não está conectada agora.');
+        return new Response('no sheet', { status: 200 });
+      }
+      try {
+        const fileURL = await baixarMidiaURL(msg.id);
+        const { conteudo, link } = await interpretarImagemIA(fileURL, msg.texto);
+        await garantirAbaIA(gToken, cfg.sheet_ideias_id);
+        await appendIA(gToken, cfg.sheet_ideias_id, formatLocal(nowISO, cfg.fuso), conteudo, link, msg.texto);
+        const corte = conteudo.length > 350 ? `${conteudo.slice(0, 350)}…` : conteudo;
+        await enviarWhatsApp(msg.numero, `🤖 Print de IA interpretado e salvo na aba *IA*:\n\n${corte}${link ? `\n🔗 ${link}` : ''}`);
+      } catch (e) {
+        console.error('falha ao processar imagem IA:', e);
+        await enviarWhatsApp(msg.numero, '🖼️ Não consegui processar a imagem. Pode reenviar?');
+      }
+      return new Response('ok', { status: 200 });
+    }
 
     // Confirmação de evento pendente (fluxo de conflito): "sim" cria, "não" descarta.
     const pend = await lerPendente(db);
@@ -226,6 +247,22 @@ Deno.serve(async (req) => {
             await upsertEvento(db, { gcal_id: ev.id, titulo: ev.titulo, start_at: start });
             resposta = `🔁 Remarcado na sua agenda: ${ev.titulo} para ${formatLocal(start, cfg.fuso)}.`;
           } catch {
+            resposta = textoReformular();
+          }
+        } else {
+          resposta = textoReformular();
+        }
+        break;
+      }
+      case 'ia': {
+        if (gToken && cfg.sheet_ideias_id) {
+          try {
+            await garantirAbaIA(gToken, cfg.sheet_ideias_id);
+            await appendIA(gToken, cfg.sheet_ideias_id, formatLocal(nowISO, cfg.fuso),
+              intent.conteudo, intent.link, intent.comentario);
+            resposta = `🤖 Salvo na aba *IA*: ${intent.conteudo}${intent.link ? `\n🔗 ${intent.link}` : ''}`;
+          } catch (e) {
+            console.error('falha ao salvar IA no Sheets:', e);
             resposta = textoReformular();
           }
         } else {

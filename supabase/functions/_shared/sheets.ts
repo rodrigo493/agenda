@@ -40,6 +40,31 @@ export async function appendIdeia(
   );
 }
 
+const ABA_IA = 'IA';
+
+// Garante a aba "IA" com cabeçalho Data | Conteúdo | Link | Comentário. Idempotente.
+export async function garantirAbaIA(accessToken: string, sheetId: string): Promise<void> {
+  const meta = await api(accessToken, 'GET', `${sheetId}?fields=sheets.properties.title`);
+  if ((meta.sheets ?? []).some((s: any) => s.properties?.title === ABA_IA)) return;
+  await api(accessToken, 'POST', `${sheetId}:batchUpdate`, {
+    requests: [{ addSheet: { properties: { title: ABA_IA } } }],
+  });
+  await api(accessToken, 'PUT', `${sheetId}/values/${ABA_IA}!A1:D1?valueInputOption=USER_ENTERED`, {
+    values: [['Data', 'Conteúdo', 'Link', 'Comentário']],
+  });
+}
+
+export async function appendIA(
+  accessToken: string, sheetId: string,
+  data: string, conteudo: string, link: string, comentario: string,
+): Promise<void> {
+  await api(
+    accessToken, 'POST',
+    `${sheetId}/values/${ABA_IA}!A:D:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    { values: [[data, conteudo, link, comentario]] },
+  );
+}
+
 // Lê as últimas ideias da aba (coluna B).
 export async function lerIdeias(
   accessToken: string, sheetId: string, limite = 15,

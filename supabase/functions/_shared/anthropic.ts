@@ -18,3 +18,37 @@ export async function classificarMensagem(
   const bloco = resp.content.find((b) => b.type === 'text');
   return parseIntent(bloco && 'text' in bloco ? bloco.text : '');
 }
+
+// Lê e interpreta um print/imagem relacionado a IA (visão do Claude). Devolve conteúdo + link extraído.
+export async function interpretarImagemIA(
+  imageUrl: string, legenda: string,
+): Promise<{ conteudo: string; link: string }> {
+  const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
+  const prompt = [
+    'Este é um print/captura de tela relacionado a Inteligência Artificial',
+    legenda ? `com o comentário do usuário: "${legenda}".` : '.',
+    'Descreva e interprete o conteúdo: qual ferramenta/site/assunto de IA aparece e os pontos principais.',
+    'Se houver uma URL/link visível na imagem, extraia-o.',
+    'Responda APENAS em JSON: {"conteudo":"descrição completa e útil","link":"url visível ou \\"\\""}.',
+  ].join(' ');
+  const resp = await client.messages.create({
+    model: 'claude-haiku-4-5',
+    max_tokens: 1024,
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'url', url: imageUrl } },
+        { type: 'text', text: prompt },
+      ],
+    }],
+  });
+  const bloco = resp.content.find((b) => b.type === 'text');
+  const raw = bloco && 'text' in bloco ? bloco.text : '';
+  try {
+    const m = raw.match(/\{[\s\S]*\}/);
+    const o = JSON.parse(m ? m[0] : raw);
+    return { conteudo: String(o.conteudo ?? raw).trim(), link: typeof o.link === 'string' ? o.link : '' };
+  } catch {
+    return { conteudo: raw.trim(), link: '' };
+  }
+}
