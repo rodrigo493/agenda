@@ -1,7 +1,7 @@
 import { getClient, getConfig, inserirItem, buscarItens, marcarStatus, registrarMensagem,
   getRefreshToken, upsertEvento, removerEventoCache,
   salvarPendente, lerPendente, limparPendente } from '../_shared/db.ts';
-import { classificarMensagem } from '../_shared/anthropic.ts';
+import { classificarMensagem, interpretarImagem } from '../_shared/anthropic.ts';
 import { enviarWhatsApp, baixarMidiaURL } from '../_shared/uazapi.ts';
 import { transcreverAudio } from '../_shared/openai.ts';
 import { uploadImagem } from '../_shared/storage.ts';
@@ -111,7 +111,7 @@ Deno.serve(async (req) => {
     const refresh = await getRefreshToken(db);
     const gToken = refresh ? await accessTokenFromRefresh(refresh).catch(() => null) : null;
 
-    // Imagem → hospeda no Storage e insere na aba "imagens" (com coluna de comentário).
+    // Imagem → Claude decide: print de IA (aba IA, interpretado + imagem) ou imagem comum (aba imagens).
     if (msg.imagem) {
       if (!gToken || !cfg.sheet_ideias_id) {
         await enviarWhatsApp(msg.numero, '🖼️ Recebi a imagem, mas a planilha/Google não está conectada agora.');
@@ -119,16 +119,25 @@ Deno.serve(async (req) => {
       }
       try {
         const fileURL = await baixarMidiaURL(msg.id);
+        const { ehIA, conteudo, link } = await interpretarImagem(fileURL, msg.texto);
         const img = await fetch(fileURL);
         const bytes = new Uint8Array(await img.arrayBuffer());
         const ctype = img.headers.get('content-type') ?? 'image/jpeg';
         const publicUrl = await uploadImagem(bytes, ctype);
-        await garantirAbaImagens(gToken, cfg.sheet_ideias_id);
-        await appendImagem(gToken, cfg.sheet_ideias_id, formatLocal(nowISO, cfg.fuso), publicUrl, msg.texto);
-        await enviarWhatsApp(msg.numero, '🖼️ Imagem salva na aba *imagens* da planilha.');
+        const dataLocal = formatLocal(nowISO, cfg.fuso);
+        if (ehIA) {
+          await garantirAbaIA(gToken, cfg.sheet_ideias_id);
+          await appendIA(gToken, cfg.sheet_ideias_id, dataLocal, conteudo, link, msg.texto, publicUrl);
+          const corte = conteudo.length > 350 ? `${conteudo.slice(0, 350)}…` : conteudo;
+          await enviarWhatsApp(msg.numero, `🤖 Print de IA interpretado e salvo na aba *IA* (com a imagem):\n\n${corte}${link ? `\n🔗 ${link}` : ''}`);
+        } else {
+          await garantirAbaImagens(gToken, cfg.sheet_ideias_id);
+          await appendImagem(gToken, cfg.sheet_ideias_id, dataLocal, publicUrl, msg.texto);
+          await enviarWhatsApp(msg.numero, '🖼️ Imagem salva na aba *imagens* da planilha.');
+        }
       } catch (e) {
-        console.error('falha ao salvar imagem:', e);
-        await enviarWhatsApp(msg.numero, '🖼️ Não consegui salvar a imagem. Pode reenviar?');
+        console.error('falha ao processar imagem:', e);
+        await enviarWhatsApp(msg.numero, '🖼️ Não consegui processar a imagem. Pode reenviar?');
       }
       return new Response('ok', { status: 200 });
     }

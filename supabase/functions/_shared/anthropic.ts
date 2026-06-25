@@ -19,17 +19,18 @@ export async function classificarMensagem(
   return parseIntent(bloco && 'text' in bloco ? bloco.text : '');
 }
 
-// Lê e interpreta um print/imagem relacionado a IA (visão do Claude). Devolve conteúdo + link extraído.
-export async function interpretarImagemIA(
+// Visão do Claude: decide se a imagem é de IA e, se for, interpreta. Senão, descreve brevemente.
+export async function interpretarImagem(
   imageUrl: string, legenda: string,
-): Promise<{ conteudo: string; link: string }> {
+): Promise<{ ehIA: boolean; conteudo: string; link: string }> {
   const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
   const prompt = [
-    'Este é um print/captura de tela relacionado a Inteligência Artificial',
-    legenda ? `com o comentário do usuário: "${legenda}".` : '.',
-    'Descreva e interprete o conteúdo: qual ferramenta/site/assunto de IA aparece e os pontos principais.',
-    'Se houver uma URL/link visível na imagem, extraia-o.',
-    'Responda APENAS em JSON: {"conteudo":"descrição completa e útil","link":"url visível ou \\"\\""}.',
+    'Olhe esta imagem.',
+    legenda ? `O usuário comentou: "${legenda}".` : '',
+    'Ela é relacionada a Inteligência Artificial (print de ferramenta/site/artigo/post sobre IA, ou conteúdo de IA)?',
+    'Se SIM: interprete (qual ferramenta/site/assunto de IA e os pontos principais) e extraia link visível.',
+    'Se NÃO (foto comum, documento, pessoa, produto, etc): apenas descreva brevemente.',
+    'Responda APENAS em JSON: {"ehIA":true|false,"conteudo":"interpretação se IA, senão breve descrição","link":"url visível ou \\"\\""}.',
   ].join(' ');
   const resp = await client.messages.create({
     model: 'claude-haiku-4-5',
@@ -47,8 +48,8 @@ export async function interpretarImagemIA(
   try {
     const m = raw.match(/\{[\s\S]*\}/);
     const o = JSON.parse(m ? m[0] : raw);
-    return { conteudo: String(o.conteudo ?? raw).trim(), link: typeof o.link === 'string' ? o.link : '' };
+    return { ehIA: o.ehIA === true, conteudo: String(o.conteudo ?? raw).trim(), link: typeof o.link === 'string' ? o.link : '' };
   } catch {
-    return { conteudo: raw.trim(), link: '' };
+    return { ehIA: false, conteudo: raw.trim(), link: '' };
   }
 }

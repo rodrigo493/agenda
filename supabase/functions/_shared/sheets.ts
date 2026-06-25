@@ -42,27 +42,55 @@ export async function appendIdeia(
 
 const ABA_IA = 'IA';
 
-// Garante a aba "IA" com cabeçalho Data | Conteúdo | Link | Comentário. Idempotente.
+// Garante a aba "IA" (Data | Conteúdo | Link | Comentário | Imagem) com a coluna de imagem larga. Idempotente.
 export async function garantirAbaIA(accessToken: string, sheetId: string): Promise<void> {
-  const meta = await api(accessToken, 'GET', `${sheetId}?fields=sheets.properties.title`);
+  const meta = await api(accessToken, 'GET', `${sheetId}?fields=sheets.properties`);
   if ((meta.sheets ?? []).some((s: any) => s.properties?.title === ABA_IA)) return;
-  await api(accessToken, 'POST', `${sheetId}:batchUpdate`, {
+  const res = await api(accessToken, 'POST', `${sheetId}:batchUpdate`, {
     requests: [{ addSheet: { properties: { title: ABA_IA } } }],
   });
-  await api(accessToken, 'PUT', `${sheetId}/values/${ABA_IA}!A1:D1?valueInputOption=USER_ENTERED`, {
-    values: [['Data', 'Conteúdo', 'Link', 'Comentário']],
+  const gid = res.replies?.[0]?.addSheet?.properties?.sheetId;
+  await api(accessToken, 'PUT', `${sheetId}/values/${ABA_IA}!A1:E1?valueInputOption=USER_ENTERED`, {
+    values: [['Data', 'Conteúdo', 'Link', 'Comentário', 'Imagem']],
   });
+  if (gid != null) {
+    await api(accessToken, 'POST', `${sheetId}:batchUpdate`, {
+      requests: [{
+        updateDimensionProperties: {
+          range: { sheetId: gid, dimension: 'COLUMNS', startIndex: 4, endIndex: 5 },
+          properties: { pixelSize: 200 }, fields: 'pixelSize',
+        },
+      }],
+    });
+  }
 }
 
 export async function appendIA(
   accessToken: string, sheetId: string,
-  data: string, conteudo: string, link: string, comentario: string,
+  data: string, conteudo: string, link: string, comentario: string, imageUrl = '',
 ): Promise<void> {
-  await api(
+  const meta = await api(accessToken, 'GET', `${sheetId}?fields=sheets.properties`);
+  const gid = (meta.sheets ?? []).find((s: any) => s.properties?.title === ABA_IA)?.properties?.sheetId;
+  const imgCell = imageUrl ? `=IMAGE("${imageUrl}")` : '';
+  const res = await api(
     accessToken, 'POST',
-    `${sheetId}/values/${ABA_IA}!A:D:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
-    { values: [[data, conteudo, link, comentario]] },
+    `${sheetId}/values/${ABA_IA}!A:E:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    { values: [[data, conteudo, link, comentario, imgCell]] },
   );
+  if (imageUrl && gid != null) {
+    const m = String(res.updates?.updatedRange ?? '').match(/!A(\d+)/);
+    if (m) {
+      const row = Number(m[1]) - 1;
+      await api(accessToken, 'POST', `${sheetId}:batchUpdate`, {
+        requests: [{
+          updateDimensionProperties: {
+            range: { sheetId: gid, dimension: 'ROWS', startIndex: row, endIndex: row + 1 },
+            properties: { pixelSize: 120 }, fields: 'pixelSize',
+          },
+        }],
+      });
+    }
+  }
 }
 
 const ABA_IMG = 'imagens';
