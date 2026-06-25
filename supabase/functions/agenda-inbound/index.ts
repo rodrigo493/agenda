@@ -4,10 +4,11 @@ import { getClient, getConfig, inserirItem, buscarItens, marcarStatus, registrar
   salvarPendenteEmail, lerPendenteEmail, limparPendenteEmail,
   salvarUltimaImagem, lerUltimaImagem, limparUltimaImagem } from '../_shared/db.ts';
 import { enviarEmail } from '../_shared/gmail.ts';
-import { classificarMensagem, interpretarImagem } from '../_shared/anthropic.ts';
-import { enviarWhatsApp, baixarMidiaURL } from '../_shared/uazapi.ts';
+import { classificarMensagem, interpretarImagem, traduzirTexto } from '../_shared/anthropic.ts';
+import { enviarWhatsApp, baixarMidiaURL, enviarAudio } from '../_shared/uazapi.ts';
 import { transcreverAudio } from '../_shared/openai.ts';
-import { uploadImagem } from '../_shared/storage.ts';
+import { uploadImagem, uploadAudio } from '../_shared/storage.ts';
+import { sintetizarVoz } from '../_shared/tts.ts';
 import { resolveReschedule, formatLocal, addMinutes } from '../_shared/datetime.ts';
 import { accessTokenFromRefresh, criarEvento, listarEventosRange, buscarEvento,
   deletarEvento, atualizarEvento } from '../_shared/gcal.ts';
@@ -343,6 +344,23 @@ Deno.serve(async (req) => {
           }
         } else {
           resposta = textoReformular();
+        }
+        break;
+      }
+      case 'traduzir': {
+        const traducao = await traduzirTexto(intent.texto, intent.idioma);
+        if (intent.formato === 'audio') {
+          try {
+            const bytes = await sintetizarVoz(traducao, intent.idioma);
+            const audioUrl = await uploadAudio(bytes);
+            await enviarAudio(msg.numero, audioUrl);
+            return new Response('ok', { status: 200 });
+          } catch (e) {
+            console.error('falha TTS:', e);
+            resposta = `🌐 ${traducao}\n(não consegui gerar o áudio agora)`;
+          }
+        } else {
+          resposta = `🌐 ${traducao}`;
         }
         break;
       }

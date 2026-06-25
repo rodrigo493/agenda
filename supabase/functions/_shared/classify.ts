@@ -16,6 +16,10 @@ export function buildClassifyPrompt(
     '- {"kind":"feito","referencia":string}      (referencia = trecho do texto da tarefa)',
     '- {"kind":"cancelar","referencia":string}',
     '- {"kind":"reagendar","referencia":string,"due_at":string|null,"delta_min":number|null}',
+    '- {"kind":"traduzir","texto":string,"idioma":string,"formato":"audio"|"texto"}  (quando pedir para TRADUZIR.',
+    '   texto = o que traduzir (NÃO traduza você, só extraia o texto original); idioma = código BCP-47 do destino',
+    '   (en-US inglês [PADRÃO se não disserem], es-ES espanhol, pt-BR português, fr-FR francês, it-IT italiano);',
+    '   formato = "texto" se pedir por escrito/em texto, senão "audio")',
     '- {"kind":"ia","conteudo":string,"link":string,"comentario":string}  (use quando a mensagem for sobre',
     '   INTELIGÊNCIA ARTIFICIAL: um link de ferramenta/artigo/site de IA, ou um assunto de IA. conteudo =',
     '   resumo/assunto; link = a URL se houver, senão ""; comentario = comentário extra do usuário, senão "")',
@@ -87,6 +91,15 @@ export function parseIntent(raw: string): Intent {
     case 'reagendar':
       return str(o.referencia) && dateOrNull(o.due_at) && numOrNull(o.delta_min)
         ? { kind: 'reagendar', referencia: o.referencia, due_at: o.due_at, delta_min: o.delta_min } : unknown;
+    case 'traduzir':
+      return str(o.texto)
+        ? {
+          kind: 'traduzir',
+          texto: o.texto,
+          idioma: typeof o.idioma === 'string' && o.idioma ? o.idioma : 'en-US',
+          formato: o.formato === 'texto' ? 'texto' : 'audio',
+        }
+        : unknown;
     case 'ia':
       return str(o.conteudo)
         ? {

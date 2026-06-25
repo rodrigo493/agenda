@@ -12,6 +12,18 @@ export async function enviarWhatsApp(numero: string, texto: string): Promise<voi
   }
 }
 
+// Envia um áudio (URL pública) pelo WhatsApp via Uazapi (/send/media, type "audio").
+export async function enviarAudio(numero: string, fileUrl: string): Promise<void> {
+  const url = Deno.env.get('UAZAPI_URL')!;
+  const token = Deno.env.get('UAZAPI_TOKEN')!;
+  const resp = await fetch(`${url}/send/media`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', token },
+    body: JSON.stringify({ number: numero, type: 'audio', file: fileUrl }),
+  });
+  if (!resp.ok) throw new Error(`Uazapi media ${resp.status}: ${await resp.text()}`);
+}
+
 // Pede à Uazapi para decriptar/hospedar a mídia de uma mensagem e devolve a URL do arquivo.
 export async function baixarMidiaURL(messageId: string): Promise<string> {
   const url = Deno.env.get('UAZAPI_URL')!;

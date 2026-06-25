@@ -7,6 +7,7 @@ export type Intent =
   | { kind: 'reagendar'; referencia: string; due_at: string | null; delta_min: number | null }
   | { kind: 'ia'; conteudo: string; link: string; comentario: string }
   | { kind: 'email'; para: string[]; assunto: string; corpo: string }
+  | { kind: 'traduzir'; texto: string; idioma: string; formato: 'audio' | 'texto' }
   | { kind: 'desconhecido' };
 
 export interface Item {

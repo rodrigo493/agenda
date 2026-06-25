@@ -19,6 +19,20 @@ export async function classificarMensagem(
   return parseIntent(bloco && 'text' in bloco ? bloco.text : '');
 }
 
+// Traduz um texto para o idioma (código BCP-47). Devolve só a tradução.
+export async function traduzirTexto(texto: string, idioma: string): Promise<string> {
+  const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
+  const resp = await client.messages.create({
+    model: 'claude-haiku-4-5',
+    max_tokens: 1024,
+    system: `Você é um tradutor. Traduza o texto do usuário para o idioma de código "${idioma}". `
+      + 'Responda APENAS com a tradução: sem aspas, sem explicações, sem o texto original.',
+    messages: [{ role: 'user', content: texto }],
+  });
+  const bloco = resp.content.find((b) => b.type === 'text');
+  return (bloco && 'text' in bloco ? bloco.text : '').trim();
+}
+
 // Visão do Claude: decide se a imagem é de IA e, se for, interpreta. Senão, descreve brevemente.
 export async function interpretarImagem(
   imageUrl: string, legenda: string,

@@ -12,3 +12,12 @@ export async function uploadImagem(bytes: Uint8Array, contentType: string): Prom
   if (error) throw new Error(`Storage upload: ${error.message}`);
   return db.storage.from('imagens').getPublicUrl(nome).data.publicUrl;
 }
+
+// Upload de áudio (MP3) para o bucket público "audios". Devolve a URL pública.
+export async function uploadAudio(bytes: Uint8Array): Promise<string> {
+  const db = getClient();
+  const nome = `${crypto.randomUUID()}.mp3`;
+  const { error } = await db.storage.from('audios').upload(nome, bytes, { contentType: 'audio/mpeg', upsert: true });
+  if (error) throw new Error(`Storage áudio: ${error.message}`);
+  return db.storage.from('audios').getPublicUrl(nome).data.publicUrl;
+}
