@@ -8,6 +8,8 @@ export function buildClassifyPrompt(
     'Responda APENAS com um objeto JSON, sem texto em volta, com um campo "kind":',
     '- {"kind":"ideia","texto":string}  (texto = a ideia COMPLETA como foi dita; pode melhorar português e',
     '   clareza, mas NUNCA resuma nem corte detalhes — preserve TODO o conteúdo)',
+    '- {"kind":"aparelhos","texto":string}  (ideia de melhoria de aparelho/equipamento; texto = conteúdo',
+    '   COMPLETO e fiel, sem resumir)',
     '- {"kind":"tarefa","texto":string,"due_at":string|null,"convidados":string[],"video":boolean}',
     '   (due_at em ISO 8601 UTC com Z, null se sem hora; convidados = e-mails citados, [] se nenhum.',
     '    Converta e-mails DITADOS por voz: "arroba"→@, "ponto"→".", junte sem espaços. Ex: "fulano arroba',
@@ -41,6 +43,8 @@ export function buildClassifyPrompt(
     'Calcule o instante absoluto e devolva em UTC (ISO com Z). Para "snooze"/"adia X min/h" use delta_min.',
     'REGRA FORTE: se a mensagem começar com a palavra "ideia" (ditada ou escrita), classifique SEMPRE como',
     'kind "ideia", com texto = todo o conteúdo após "ideia" (completo, fiel, sem resumir).',
+    'REGRA FORTE: se a mensagem começar com "aparelhos", classifique SEMPRE como kind "aparelhos", texto = todo',
+    'o conteúdo após "aparelhos" (completo, fiel, sem resumir).',
     'REGRA FORTE: se a mensagem começar com "traduz"/"traduzir"/"tradução", classifique SEMPRE como kind',
     '"traduzir" (texto = o conteúdo a traduzir; idioma padrão en-US se não disserem; formato áudio salvo se pedir texto).',
     'REGRA FORTE: se a mensagem estiver em OUTRO idioma que não português (ex: inglês, espanhol) e NÃO for um',
@@ -83,6 +87,8 @@ export function parseIntent(raw: string): Intent {
   switch (o.kind) {
     case 'ideia':
       return str(o.texto) ? { kind: 'ideia', texto: o.texto } : unknown;
+    case 'aparelhos':
+      return str(o.texto) ? { kind: 'aparelhos', texto: o.texto } : unknown;
     case 'tarefa': {
       if (!str(o.texto) || !dateOrNull(o.due_at)) return unknown;
       const convidados = Array.isArray(o.convidados)

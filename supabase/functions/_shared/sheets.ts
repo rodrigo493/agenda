@@ -40,6 +40,30 @@ export async function appendIdeia(
   );
 }
 
+const ABA_AP = 'aparelhos';
+
+// Garante a aba "aparelhos" (Data | Ideia). Idempotente.
+export async function garantirAbaAparelhos(accessToken: string, sheetId: string): Promise<void> {
+  const meta = await api(accessToken, 'GET', `${sheetId}?fields=sheets.properties.title`);
+  if ((meta.sheets ?? []).some((s: any) => s.properties?.title === ABA_AP)) return;
+  await api(accessToken, 'POST', `${sheetId}:batchUpdate`, {
+    requests: [{ addSheet: { properties: { title: ABA_AP } } }],
+  });
+  await api(accessToken, 'PUT', `${sheetId}/values/${ABA_AP}!A1:B1?valueInputOption=USER_ENTERED`, {
+    values: [['Data', 'Ideia']],
+  });
+}
+
+export async function appendAparelho(
+  accessToken: string, sheetId: string, dataLocal: string, texto: string,
+): Promise<void> {
+  await api(
+    accessToken, 'POST',
+    `${sheetId}/values/${ABA_AP}!A:B:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    { values: [[dataLocal, texto]] },
+  );
+}
+
 const ABA_IA = 'IA';
 
 // Garante a aba "IA" (Data | Conteúdo | Link | Comentário | Imagem) com a coluna de imagem larga. Idempotente.

@@ -13,7 +13,8 @@ import { resolveReschedule, formatLocal, addMinutes } from '../_shared/datetime.
 import { accessTokenFromRefresh, criarEvento, listarEventosRange, buscarEvento,
   deletarEvento, atualizarEvento } from '../_shared/gcal.ts';
 import { garantirAbaIdeias, appendIdeia, lerIdeias, garantirAbaIA, appendIA,
-  garantirAbaImagens, appendImagem, atualizarCelula } from '../_shared/sheets.ts';
+  garantirAbaImagens, appendImagem, atualizarCelula,
+  garantirAbaAparelhos, appendAparelho } from '../_shared/sheets.ts';
 import { textoConfirmacao, textoLista, textoReformular } from '../_shared/messages.ts';
 
 // Fim do dia de hoje no fuso local (assume Brasil, UTC-3, sem horário de verão).
@@ -244,6 +245,20 @@ Deno.serve(async (req) => {
         } else {
           await inserirItem(db, 'ideia', intent.texto, null);
           resposta = textoConfirmacao('ideia', intent.texto, null, cfg.fuso);
+        }
+        break;
+      case 'aparelhos':
+        if (gToken && cfg.sheet_ideias_id) {
+          try {
+            await garantirAbaAparelhos(gToken, cfg.sheet_ideias_id);
+            await appendAparelho(gToken, cfg.sheet_ideias_id, formatLocal(nowISO, cfg.fuso), intent.texto);
+            resposta = `🔧 Anotado na aba *aparelhos*: ${intent.texto}`;
+          } catch (e) {
+            console.error('falha ao gravar aparelho no Sheets:', e);
+            resposta = textoReformular();
+          }
+        } else {
+          resposta = textoReformular();
         }
         break;
       case 'tarefa':
