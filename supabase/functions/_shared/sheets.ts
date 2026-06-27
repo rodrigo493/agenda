@@ -35,7 +35,7 @@ export async function appendIdeia(
 ): Promise<void> {
   await api(
     accessToken, 'POST',
-    `${sheetId}/values/${ABA}!A:B:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    `${sheetId}/values/${ABA}!A:B:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
     { values: [[dataLocal, ideia]] },
   );
 }
@@ -59,7 +59,7 @@ export async function appendAparelho(
 ): Promise<void> {
   await api(
     accessToken, 'POST',
-    `${sheetId}/values/${ABA_AP}!A:C:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    `${sheetId}/values/${ABA_AP}!A:C:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
     { values: [[dataLocal, aparelho, texto]] },
   );
 }
@@ -99,7 +99,7 @@ export async function appendIA(
   const res = await api(
     accessToken, 'POST',
     `${sheetId}/values/${ABA_IA}!A:E:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
-    { values: [[data, conteudo, link, comentario, imgCell]] },
+    { values: [[`'${data}`, conteudo, link, comentario, imgCell]] },
   );
   const m = String(res.updates?.updatedRange ?? '').match(/!A(\d+)/);
   if (!m) return 0;
@@ -151,7 +151,7 @@ export async function appendImagem(
   const res = await api(
     accessToken, 'POST',
     `${sheetId}/values/${ABA_IMG}!A:C:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
-    { values: [[data, `=IMAGE("${imageUrl}")`, comentario]] },
+    { values: [[`'${data}`, `=IMAGE("${imageUrl}")`, comentario]] },
   );
   const m = String(res.updates?.updatedRange ?? '').match(/!A(\d+)/);
   if (!m) return 0;
