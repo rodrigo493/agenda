@@ -42,25 +42,25 @@ export async function appendIdeia(
 
 const ABA_AP = 'aparelhos';
 
-// Garante a aba "aparelhos" (Data | Ideia). Idempotente.
+// Garante a aba "aparelhos" (Data | Aparelho | Ideia). Idempotente.
 export async function garantirAbaAparelhos(accessToken: string, sheetId: string): Promise<void> {
   const meta = await api(accessToken, 'GET', `${sheetId}?fields=sheets.properties.title`);
   if ((meta.sheets ?? []).some((s: any) => s.properties?.title === ABA_AP)) return;
   await api(accessToken, 'POST', `${sheetId}:batchUpdate`, {
     requests: [{ addSheet: { properties: { title: ABA_AP } } }],
   });
-  await api(accessToken, 'PUT', `${sheetId}/values/${ABA_AP}!A1:B1?valueInputOption=USER_ENTERED`, {
-    values: [['Data', 'Ideia']],
+  await api(accessToken, 'PUT', `${sheetId}/values/${ABA_AP}!A1:C1?valueInputOption=USER_ENTERED`, {
+    values: [['Data', 'Aparelho', 'Ideia']],
   });
 }
 
 export async function appendAparelho(
-  accessToken: string, sheetId: string, dataLocal: string, texto: string,
+  accessToken: string, sheetId: string, dataLocal: string, aparelho: string, texto: string,
 ): Promise<void> {
   await api(
     accessToken, 'POST',
-    `${sheetId}/values/${ABA_AP}!A:B:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
-    { values: [[dataLocal, texto]] },
+    `${sheetId}/values/${ABA_AP}!A:C:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    { values: [[dataLocal, aparelho, texto]] },
   );
 }
 

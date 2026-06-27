@@ -251,8 +251,8 @@ Deno.serve(async (req) => {
         if (gToken && cfg.sheet_ideias_id) {
           try {
             await garantirAbaAparelhos(gToken, cfg.sheet_ideias_id);
-            await appendAparelho(gToken, cfg.sheet_ideias_id, formatLocal(nowISO, cfg.fuso), intent.texto);
-            resposta = `🔧 Anotado na aba *aparelhos*: ${intent.texto}`;
+            await appendAparelho(gToken, cfg.sheet_ideias_id, formatLocal(nowISO, cfg.fuso), intent.aparelho, intent.texto);
+            resposta = `🔧 Anotado na aba *aparelhos*${intent.aparelho ? ` (${intent.aparelho})` : ''}: ${intent.texto}`;
           } catch (e) {
             console.error('falha ao gravar aparelho no Sheets:', e);
             resposta = textoReformular();
