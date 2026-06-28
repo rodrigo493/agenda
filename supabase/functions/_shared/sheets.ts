@@ -57,11 +57,27 @@ export async function garantirAbaAparelhos(accessToken: string, sheetId: string)
 export async function appendAparelho(
   accessToken: string, sheetId: string, dataLocal: string, aparelho: string, texto: string,
 ): Promise<void> {
+  const meta = await api(accessToken, 'GET', `${sheetId}?fields=sheets.properties`);
+  const gid = (meta.sheets ?? []).find((s: any) => s.properties?.title === ABA_AP)?.properties?.sheetId;
   await api(
     accessToken, 'POST',
     `${sheetId}/values/${ABA_AP}!A:C:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
     { values: [[dataLocal, aparelho, texto]] },
   );
+  // Agrupa: reordena as linhas de dados por Aparelho (col B) e depois Data (col A).
+  if (gid != null) {
+    await api(accessToken, 'POST', `${sheetId}:batchUpdate`, {
+      requests: [{
+        sortRange: {
+          range: { sheetId: gid, startRowIndex: 1, startColumnIndex: 0, endColumnIndex: 3 },
+          sortSpecs: [
+            { dimensionIndex: 1, sortOrder: 'ASCENDING' },
+            { dimensionIndex: 0, sortOrder: 'ASCENDING' },
+          ],
+        },
+      }],
+    });
+  }
 }
 
 const ABA_IA = 'IA';
